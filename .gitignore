@@ -55,6 +55,5 @@ scripts/discover_jo.py
 scripts/get_codes.py
 scripts/main.py
 scripts/plot_document.py
-scripts/plot_newspaper.py
 scripts/test.py
 scripts/test_agent.py
