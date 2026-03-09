@@ -49,7 +49,8 @@ export default function App() {
           name: groupName,
           x: [], y: [], z: [],
           text: [],
-          hoverinfo: 'text',
+          customdata: [],   // stores article URLs for click-to-open
+          hovertemplate: '%{text}<extra></extra>',
           mode: 'markers',
           type: dim === '2D' ? 'scatter' : 'scatter3d',
           marker: { size: dim === '2D' ? 8 : 4, opacity: 0.85, line: { width: 0 } }
@@ -61,7 +62,8 @@ export default function App() {
       if (dim === '3D') groups[groupName].z.push(coords[2]);
 
       const snippet = pt.snippet ? pt.snippet.substring(0, 200) : '';
-      groups[groupName].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><br>${snippet}`);
+      groups[groupName].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><br>${snippet}<br><br><i>🔗 Click to open article</i>`);
+      groups[groupName].customdata.push(pt.url || '');
     });
 
     return Object.values(groups);
@@ -96,6 +98,17 @@ export default function App() {
     };
 
     Plotly.react(plotRef.current, plotTraces, layout, { responsive: true, displayModeBar: true });
+
+    // Click handler: open article URL in a new tab
+    const el = plotRef.current;
+    el.removeAllListeners('plotly_click');
+    el.on('plotly_click', (eventData) => {
+      const pt = eventData.points[0];
+      const url = pt.customdata;
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    });
   }, [plotTraces, method, dim]);
 
   return (
