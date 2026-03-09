@@ -46,3 +46,15 @@ newspaper_chroma_db/
 # Logs
 logs/
 *.log
+
+# Unused Scripts
+codes_list.yml
+scripts/RAG.py
+scripts/create_codes_db.py
+scripts/discover_jo.py
+scripts/get_codes.py
+scripts/main.py
+scripts/plot_document.py
+scripts/plot_newspaper.py
+scripts/test.py
+scripts/test_agent.py
