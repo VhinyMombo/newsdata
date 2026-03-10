@@ -24,7 +24,7 @@ import pandas as pd
 from langchain_core.documents import Document
 from langchain_ollama.embeddings import OllamaEmbeddings
 
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent  # scripts/newspaper_pipeline/ → scripts/ → rag/
 DATA_DIR = ROOT_DIR / "Newspaperdata"
 
 
