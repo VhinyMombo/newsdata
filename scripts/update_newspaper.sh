@@ -31,7 +31,7 @@ echo ""
 
 # Step 3: Rebuild ChromaDB
 echo "🗄️  [3/3] Building ChromaDB..."
-$PYTHON "$DIR/scripts/newspaper_pipeline/create_newspaper_db.py" --reset
+$PYTHON "$DIR/scripts/newspaper_pipeline/create_newspaper_db.py"
 echo ""
 
 echo "============================================"

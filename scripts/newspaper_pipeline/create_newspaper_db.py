@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
 """
-Build a Chroma vector DB from newspaper CSVs (GabonReview + GabonMediaTime).
+Build/update a Chroma vector DB from newspaper CSVs (GabonReview + GabonMediaTime).
 
-Reads CSV files produced by scrape_gabon_review.py and scrape_gabon_media_time.py
-(columns: category, title, published_time, url, text) and creates embeddings
-stored in a ChromaDB.  A 'source' metadata field is added automatically.
+Uses upsert() with a URL-based ID so only NEW articles are added on incremental runs —
+existing articles are never duplicated. Use --reset for a full rebuild.
 
 Usage:
-    python scripts/create_newspaper_db.py --reset
-    python scripts/create_newspaper_db.py --csv-paths Newspaperdata/gabonreview_*.csv
+    python scripts/newspaper_pipeline/create_newspaper_db.py          # incremental update
+    python scripts/newspaper_pipeline/create_newspaper_db.py --reset   # full rebuild
 """
 
 from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import os
 import shutil
 from pathlib import Path
 
+import chromadb
 import pandas as pd
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
 from langchain_ollama.embeddings import OllamaEmbeddings
 
 ROOT_DIR = Path(__file__).parent.parent
@@ -116,6 +115,11 @@ def load_newspaper_csvs(paths: list[Path], max_rows: int | None) -> list[Documen
     return deduped
 
 
+def make_doc_id(url: str) -> str:
+    """Deterministic ID from URL so upsert never creates duplicates."""
+    return hashlib.md5(url.encode()).hexdigest()
+
+
 def main() -> None:
     # Collect all newspaper CSVs from Newspaperdata/ (both sources)
     default_csvs = sorted(
@@ -168,24 +172,51 @@ def main() -> None:
     persist_dir: Path = args.persist_dir
     if args.reset and persist_dir.exists():
         shutil.rmtree(persist_dir)
+        print("♻️  Removed existing database for full rebuild.")
 
     docs = load_newspaper_csvs(list(args.csv_paths), max_rows=args.max_rows)
 
-    print(f"Creating embeddings for {len(docs)} articles using '{args.embed_model}'...")
-    embedding = OllamaEmbeddings(model=args.embed_model)
-    Chroma.from_documents(
-        documents=docs,
-        embedding=embedding,
-        collection_name=args.collection,
-        persist_directory=str(persist_dir),
+    print(f"Generating embeddings for {len(docs)} articles using '{args.embed_model}'...")
+    embedding_model = OllamaEmbeddings(model=args.embed_model)
+
+    # Build ChromaDB client & collection
+    client = chromadb.PersistentClient(path=str(persist_dir))
+    collection = client.get_or_create_collection(name=args.collection)
+
+    # Prepare data for upsert
+    ids        = [make_doc_id(d.metadata["source_url"]) for d in docs]
+    texts      = [d.page_content for d in docs]
+    metadatas  = [d.metadata for d in docs]
+
+    # Check which IDs already exist in the collection
+    existing = set(collection.get(ids=ids, include=[])['ids'])
+    new_docs      = [(id_, text, meta) for id_, text, meta in zip(ids, texts, metadatas) if id_ not in existing]
+
+    if not new_docs:
+        print("✅ Database already up to date — no new articles to add.")
+        return
+
+    new_ids   = [x[0] for x in new_docs]
+    new_texts = [x[1] for x in new_docs]
+    new_metas = [x[2] for x in new_docs]
+
+    print(f"  → {len(existing)} already in DB, adding {len(new_docs)} new articles...")
+    embeddings = embedding_model.embed_documents(new_texts)
+
+    collection.upsert(
+        ids=new_ids,
+        embeddings=embeddings,
+        documents=new_texts,
+        metadatas=new_metas,
     )
 
+    total = collection.count()
     print(
-        f"\n✅ Saved {len(docs)} documents to Chroma.\n"
-        f"  - collection : {args.collection}\n"
-        f"  - persist dir: {persist_dir.resolve()}\n"
-        f"  - csvs       : {', '.join(str(p.resolve()) for p in args.csv_paths)}\n"
-        f"  - embed model: {args.embed_model}"
+        f"\n✅ Done. Added {len(new_docs)} new articles.\n"
+        f"  - Total in DB  : {total}\n"
+        f"  - Collection   : {args.collection}\n"
+        f"  - Persist dir  : {persist_dir.resolve()}\n"
+        f"  - Embed model  : {args.embed_model}"
     )
 
 
