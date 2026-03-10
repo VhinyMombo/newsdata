@@ -19,7 +19,6 @@ export default function App() {
   const [question, setQuestion] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
-  const [searchAnswer, setSearchAnswer] = useState(null);
   const [searchError, setSearchError] = useState(null);
 
   const plotRef = useRef(null);
@@ -43,7 +42,6 @@ export default function App() {
     setSearching(true);
     setSearchError(null);
     setSearchResults(null);
-    setSearchAnswer(null);
 
     try {
       const res = await fetch(`${API_URL}/search`, {
@@ -53,7 +51,6 @@ export default function App() {
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
-      setSearchAnswer(json.answer);
       setSearchResults(json.results);
     } catch (err) {
       setSearchError("Could not reach the API server. Make sure it's running: .venv/bin/python api.py");
@@ -130,21 +127,21 @@ export default function App() {
     if (!plotRef.current || plotTraces.length === 0) return;
     const is3D = dim === '3D';
     const layout = {
-      title: { text: `${method} ${dim} — Articles de Presse`, font: { color: '#e6edf3', family: 'Inter', size: 18 } },
-      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { color: '#8b949e', family: 'Inter' },
-      hovermode: 'closest', margin: { l: 40, r: 20, b: 40, t: 60 }, showlegend: true,
-      legend: { font: { color: '#e6edf3' }, bgcolor: 'rgba(22,27,34,0.7)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1 },
+      title: { text: `${method} ${dim} — Articles de Presse Gabonaise`, font: { color: '#ffffff', family: 'Inter', size: 16, weight: 700 } },
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(15,25,35,0.6)',
+      font: { color: '#94a3b8', family: 'Inter' },
+      hovermode: 'closest', margin: { l: 40, r: 20, b: 40, t: 50 }, showlegend: true,
+      legend: { font: { color: '#ffffff', size: 11 }, bgcolor: 'rgba(15,25,35,0.85)', bordercolor: 'rgba(0,173,239,0.2)', borderwidth: 1 },
       ...(is3D ? {
         scene: {
-          xaxis: { title: `${method} 1`, gridcolor: 'rgba(255,255,255,0.1)', zerolinecolor: 'rgba(255,255,255,0.2)' },
-          yaxis: { title: `${method} 2`, gridcolor: 'rgba(255,255,255,0.1)', zerolinecolor: 'rgba(255,255,255,0.2)' },
-          zaxis: { title: `${method} 3`, gridcolor: 'rgba(255,255,255,0.1)', zerolinecolor: 'rgba(255,255,255,0.2)' },
-          bgcolor: 'rgba(0,0,0,0)'
+          xaxis: { title: `${method} 1`, gridcolor: 'rgba(0,173,239,0.1)', zerolinecolor: 'rgba(0,173,239,0.3)', color: '#94a3b8' },
+          yaxis: { title: `${method} 2`, gridcolor: 'rgba(0,173,239,0.1)', zerolinecolor: 'rgba(0,173,239,0.3)', color: '#94a3b8' },
+          zaxis: { title: `${method} 3`, gridcolor: 'rgba(0,173,239,0.1)', zerolinecolor: 'rgba(0,173,239,0.3)', color: '#94a3b8' },
+          bgcolor: 'rgba(15,25,35,0.3)'
         }
       } : {
-        xaxis: { title: `${method} 1`, gridcolor: 'rgba(255,255,255,0.05)', zerolinecolor: 'rgba(255,255,255,0.1)' },
-        yaxis: { title: `${method} 2`, gridcolor: 'rgba(255,255,255,0.05)', zerolinecolor: 'rgba(255,255,255,0.1)' }
+        xaxis: { title: `${method} 1`, gridcolor: 'rgba(0,173,239,0.07)', zerolinecolor: 'rgba(0,173,239,0.15)', color: '#4e6278' },
+        yaxis: { title: `${method} 2`, gridcolor: 'rgba(0,173,239,0.07)', zerolinecolor: 'rgba(0,173,239,0.15)', color: '#4e6278' }
       })
     };
     Plotly.react(plotRef.current, plotTraces, layout, { responsive: true, displayModeBar: true });
@@ -192,13 +189,6 @@ export default function App() {
 
           {searchError && (
             <p className="search-error">{searchError}</p>
-          )}
-
-          {searchAnswer && (
-            <div className="answer-bubble">
-              <span className="answer-label">🤖 Réponse</span>
-              <p className="answer-text">{searchAnswer}</p>
-            </div>
           )}
 
           {searchResults && searchResults.length > 0 && (
