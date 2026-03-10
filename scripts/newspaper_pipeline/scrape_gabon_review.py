@@ -17,7 +17,7 @@ import argparse
 import csv
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
