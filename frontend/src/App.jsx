@@ -1,88 +1,100 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Plotly from 'plotly.js-dist-min';
-import { Newspaper, ChevronDown, Database, Activity } from 'lucide-react';
+import { Newspaper, ChevronDown, Database, Search, ExternalLink, Loader } from 'lucide-react';
 import './index.css';
+
+const API_URL = 'http://localhost:8000';
 
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Controls state
-  const [method, setMethod] = useState('PCA'); // PCA | UMAP
-  const [dim, setDim] = useState('2D');        // 2D | 3D
-  const [colorBy, setColorBy] = useState('category'); // category | source
+  // Plot controls
+  const [method, setMethod] = useState('PCA');
+  const [dim, setDim] = useState('2D');
+  const [colorBy, setColorBy] = useState('category');
+
+  // Search state
+  const [question, setQuestion] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchError, setSearchError] = useState(null);
 
   const plotRef = useRef(null);
 
+  // Load data.json
   useEffect(() => {
     fetch('/data.json')
       .then(res => {
-        if (!res.ok) throw new Error('Data file not found. Ensure export_embeddings.py was run.');
+        if (!res.ok) throw new Error('data.json not found. Run export_embeddings.py first.');
         return res.json();
       })
-      .then(json => {
-        setData(json);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setError(err.message);
-        setLoading(false);
-      });
+      .then(json => { setData(json); setLoading(false); })
+      .catch(err => { setError(err.message); setLoading(false); });
   }, []);
+
+  // Semantic search via the Python API
+  const handleSearch = useCallback(async (e) => {
+    e?.preventDefault();
+    if (!question.trim()) return;
+
+    setSearching(true);
+    setSearchError(null);
+    setSearchResults(null);
+
+    try {
+      const res = await fetch(`${API_URL}/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question.trim(), n_results: 5 }),
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const json = await res.json();
+      setSearchResults(json.results);
+    } catch (err) {
+      setSearchError("Could not reach the API server. Make sure it's running: .venv/bin/python api.py");
+    } finally {
+      setSearching(false);
+    }
+  }, [question]);
 
   // Build Plotly traces
   const plotTraces = useMemo(() => {
     if (!data || !data.points) return [];
-
     const groups = {};
-
     data.points.forEach(pt => {
       const projKey = `${method}_${dim}`;
       const coords = pt.projections[projKey];
       if (!coords) return;
-
       const groupName = pt[colorBy] || 'unknown';
       if (!groups[groupName]) {
         groups[groupName] = {
-          name: groupName,
-          x: [], y: [], z: [],
-          text: [],
-          customdata: [],   // stores article URLs for click-to-open
+          name: groupName, x: [], y: [], z: [], text: [], customdata: [],
           hovertemplate: '%{text}<extra></extra>',
-          mode: 'markers',
-          type: dim === '2D' ? 'scatter' : 'scatter3d',
+          mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
           marker: { size: dim === '2D' ? 8 : 4, opacity: 0.85, line: { width: 0 } }
         };
       }
-
       groups[groupName].x.push(coords[0]);
       groups[groupName].y.push(coords[1]);
       if (dim === '3D') groups[groupName].z.push(coords[2]);
-
       const snippet = pt.snippet ? pt.snippet.substring(0, 200) : '';
       groups[groupName].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><br>${snippet}<br><br><i>🔗 Click to open article</i>`);
       groups[groupName].customdata.push(pt.url || '');
     });
-
     return Object.values(groups);
   }, [data, method, dim, colorBy]);
 
-  // Render/update Plotly chart imperatively via useEffect
+  // Render Plotly chart
   useEffect(() => {
     if (!plotRef.current || plotTraces.length === 0) return;
-
     const is3D = dim === '3D';
-
     const layout = {
       title: { text: `${method} ${dim} — Articles de Presse`, font: { color: '#e6edf3', family: 'Inter', size: 18 } },
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
       font: { color: '#8b949e', family: 'Inter' },
-      hovermode: 'closest',
-      margin: { l: 40, r: 20, b: 40, t: 60 },
-      showlegend: true,
+      hovermode: 'closest', margin: { l: 40, r: 20, b: 40, t: 60 }, showlegend: true,
       legend: { font: { color: '#e6edf3' }, bgcolor: 'rgba(22,27,34,0.7)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1 },
       ...(is3D ? {
         scene: {
@@ -96,18 +108,12 @@ export default function App() {
         yaxis: { title: `${method} 2`, gridcolor: 'rgba(255,255,255,0.05)', zerolinecolor: 'rgba(255,255,255,0.1)' }
       })
     };
-
     Plotly.react(plotRef.current, plotTraces, layout, { responsive: true, displayModeBar: true });
-
-    // Click handler: open article URL in a new tab
     const el = plotRef.current;
     el.removeAllListeners('plotly_click');
     el.on('plotly_click', (eventData) => {
-      const pt = eventData.points[0];
-      const url = pt.customdata;
-      if (url) {
-        window.open(url, '_blank', 'noopener,noreferrer');
-      }
+      const url = eventData.points[0].customdata;
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
     });
   }, [plotTraces, method, dim]);
 
@@ -120,10 +126,66 @@ export default function App() {
             <h1 className="title">Gabon Media RAG</h1>
           </header>
           <p className="description">
-            Visualisez la distribution thématique des articles de presse extraits de GabonReview et GabonMediaTime.
+            Visualisez et interrogez les articles de presse extraits de GabonReview et GabonMediaTime.
           </p>
         </div>
 
+        {/* ── Search Panel ───────────────────────────────── */}
+        <div className="search-section">
+          <label className="control-label">
+            <Search size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Poser une question
+          </label>
+          <form onSubmit={handleSearch} className="search-form">
+            <textarea
+              className="search-input"
+              placeholder="Ex: Que dit l'opposition sur la transition ?"
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              rows={3}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSearch(e); }}
+            />
+            <button type="submit" className="search-btn" disabled={searching || !question.trim()}>
+              {searching ? <Loader size={16} className="spin" /> : <Search size={16} />}
+              {searching ? 'Recherche...' : 'Rechercher'}
+            </button>
+          </form>
+
+          {searchError && (
+            <p className="search-error">{searchError}</p>
+          )}
+
+          {searchResults && searchResults.length > 0 && (
+            <div className="search-results">
+              <p className="results-label">{searchResults.length} articles les plus proches :</p>
+              {searchResults.map((art, i) => (
+                <a
+                  key={i}
+                  href={art.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="result-card"
+                >
+                  <div className="result-header">
+                    <span className="result-source">{art.source}</span>
+                    <span className="result-date">{art.date}</span>
+                  </div>
+                  <p className="result-title">{art.title}</p>
+                  <p className="result-snippet">{art.snippet.substring(0, 120)}…</p>
+                  <div className="result-link">
+                    <ExternalLink size={12} /> Ouvrir l'article
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {searchResults && searchResults.length === 0 && (
+            <p className="search-error">Aucun résultat trouvé.</p>
+          )}
+        </div>
+
+        {/* ── Plot Controls ───────────────────────────────── */}
         <div className="control-group">
           <label className="control-label">Projection Method</label>
           <div className="radio-group">
@@ -165,24 +227,9 @@ export default function App() {
       </aside>
 
       <main className="main-content">
-        {loading && (
-          <div className="loading-container">
-            <div className="spinner"></div>
-            <p>Chargement des embeddings...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="error-container">
-            <Activity size={32} style={{ margin: '0 auto 12px' }} />
-            <h3>Erreur de Chargement</h3>
-            <p>{error}</p>
-          </div>
-        )}
-
-        {!loading && !error && (
-          <div ref={plotRef} className="plot-container" />
-        )}
+        {loading && <div className="loading-container"><div className="spinner"></div><p>Chargement des embeddings...</p></div>}
+        {error && <div className="error-container"><p>{error}</p></div>}
+        {!loading && !error && <div ref={plotRef} className="plot-container" />}
       </main>
     </div>
   );
