@@ -231,7 +231,8 @@ def main() -> None:
     # Sort by date descending
     all_articles.sort(key=lambda r: r["published_time"], reverse=True)
 
-    csv_path = DATA_DIR / f"gabonreview_{date_min}_to_{date_max}.csv"
+    today = date.today().isoformat()
+    csv_path = DATA_DIR / f"gabonreview_{today}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
