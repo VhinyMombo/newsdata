@@ -452,3 +452,29 @@ body {
 .spin {
   animation: spin 0.8s linear infinite;
 }
+/* ── AI Answer Bubble ──────────────────────────────────── */
+.answer-bubble {
+  background: linear-gradient(135deg, rgba(0,173,239,0.08), rgba(0,90,150,0.06));
+  border: 1px solid rgba(0, 173, 239, 0.3);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 0 20px rgba(0, 173, 239, 0.08);
+}
+
+.answer-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.answer-text {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}

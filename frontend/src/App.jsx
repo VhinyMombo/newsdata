@@ -19,6 +19,7 @@ export default function App() {
   const [question, setQuestion] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
+  const [searchAnswer, setSearchAnswer] = useState(null);
   const [searchError, setSearchError] = useState(null);
 
   const plotRef = useRef(null);
@@ -42,6 +43,7 @@ export default function App() {
     setSearching(true);
     setSearchError(null);
     setSearchResults(null);
+    setSearchAnswer(null);
 
     try {
       const res = await fetch(`${API_URL}/search`, {
@@ -51,6 +53,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
+      setSearchAnswer(json.answer);
       setSearchResults(json.results);
     } catch (err) {
       setSearchError("Could not reach the API server. Make sure it's running: .venv/bin/python api.py");
@@ -187,8 +190,13 @@ export default function App() {
             </button>
           </form>
 
-          {searchError && (
-            <p className="search-error">{searchError}</p>
+          {searchError && <p className="search-error">{searchError}</p>}
+
+          {searchAnswer && (
+            <div className="answer-bubble">
+              <span className="answer-label">🤖 Réponse</span>
+              <p className="answer-text">{searchAnswer}</p>
+            </div>
           )}
 
           {searchResults && searchResults.length > 0 && (
