@@ -40,8 +40,8 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 320px;
-  min-width: 320px;
+  width: 420px;
+  min-width: 420px;
   height: 100%;
   background: var(--panel-bg);
   backdrop-filter: var(--glass-blur);

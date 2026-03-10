@@ -66,6 +66,9 @@ export default function App() {
   const plotTraces = useMemo(() => {
     if (!data || !data.points) return [];
     const groups = {};
+    // Build a set of URLs from current search results for fast lookup
+    const highlightUrls = new Set((searchResults || []).map(r => r.url));
+
     data.points.forEach(pt => {
       const projKey = `${method}_${dim}`;
       const coords = pt.projections[projKey];
@@ -76,7 +79,7 @@ export default function App() {
           name: groupName, x: [], y: [], z: [], text: [], customdata: [],
           hovertemplate: '%{text}<extra></extra>',
           mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
-          marker: { size: dim === '2D' ? 8 : 4, opacity: 0.85, line: { width: 0 } }
+          marker: { size: dim === '2D' ? 7 : 4, opacity: highlightUrls.size > 0 ? 0.25 : 0.85, line: { width: 0 } }
         };
       }
       groups[groupName].x.push(coords[0]);
@@ -86,8 +89,41 @@ export default function App() {
       groups[groupName].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><br>${snippet}<br><br><i>🔗 Click to open article</i>`);
       groups[groupName].customdata.push(pt.url || '');
     });
-    return Object.values(groups);
-  }, [data, method, dim, colorBy]);
+
+    const baseTraces = Object.values(groups);
+
+    // Highlighted search result overlay
+    if (highlightUrls.size > 0) {
+      const hx = [], hy = [], hz = [], htxt = [], hdata = [];
+      data.points.forEach(pt => {
+        if (!highlightUrls.has(pt.url)) return;
+        const coords = pt.projections[`${method}_${dim}`];
+        if (!coords) return;
+        hx.push(coords[0]); hy.push(coords[1]);
+        if (dim === '3D') hz.push(coords[2]);
+        // Find rank in results
+        const rank = (searchResults || []).findIndex(r => r.url === pt.url) + 1;
+        htxt.push(`<b>#${rank} — ${pt.title}</b><br>${pt.date} — ${pt.source}<br><br><i>🔗 Click to open article</i>`);
+        hdata.push(pt.url || '');
+      });
+      baseTraces.push({
+        name: '🔍 Résultats de recherche',
+        x: hx, y: hy, z: dim === '3D' ? hz : undefined,
+        text: htxt, customdata: hdata,
+        hovertemplate: '%{text}<extra></extra>',
+        mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
+        marker: {
+          size: dim === '2D' ? 16 : 8,
+          color: '#58a6ff',
+          opacity: 1,
+          line: { color: '#ffffff', width: 2 },
+          symbol: 'star'
+        }
+      });
+    }
+
+    return baseTraces;
+  }, [data, method, dim, colorBy, searchResults]);
 
   // Render Plotly chart
   useEffect(() => {
