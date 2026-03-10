@@ -10,6 +10,7 @@ Usage:
 """
 
 import os
+from datetime import date
 from pathlib import Path
 
 import chromadb
@@ -46,16 +47,30 @@ print(f"  ✅ {_collection.count()} articles ready  |  LLM: {CHAT_MODEL}")
 
 # ── RAG Prompt ────────────────────────────────────────────────────────────────
 
-RAG_SYSTEM = """\
+TEMPORAL_KEYWORDS = [
+    "aujourd'hui", "du jour", "ce soir", "cette semaine", "ce mois",
+    "récent", "dernier", "dernière", "maintenant", "actuellement", "news", "latest"
+]
+
+def is_temporal_query(question: str) -> bool:
+    q = question.lower()
+    return any(kw in q for kw in TEMPORAL_KEYWORDS)
+
+
+def get_rag_system() -> str:
+    today = date.today().strftime("%d %B %Y")
+    return f"""\
 Tu es un assistant journalistique expert en actualités gabonaises.
-Tu reçois une question d'un utilisateur et des extraits d'articles de presse récents ayant servi de contexte.
+Aujourd'hui, nous sommes le {today}.
+Tu reçois une question d'un utilisateur et des extraits d'articles de presse récents.
 
 Règles impératives :
 - Réponds uniquement à partir des informations présentes dans les articles fournis.
-- Si les articles ne permettent pas de répondre à la question, dis-le clairement.
+- Si les articles ne permettent pas de répondre, dis-le clairement.
+- Pour les questions sur "les news du jour" ou "aujourd'hui", base-toi en priorité sur les articles les plus récents.
 - Rédige une réponse synthétique, fluide et bien structurée en français.
-- Ne liste pas les sources dans ta réponse (elles seront affichées séparément).
-- Sois factuel, objectif et concis (3 à 6 phrases maximum).
+- Ne liste pas les sources (elles sont affichées séparément).
+- Sois factuel, objectif et concis (4 à 7 phrases).
 """
 
 def build_rag_prompt(question: str, articles: list[dict]) -> str:
@@ -110,21 +125,25 @@ def search(req: SearchRequest):
     # 1. Embed question
     q_vec = _embedder.embed_query(req.question)
 
-    # 2. Retrieve top-K articles from ChromaDB
+    # 2. Retrieve top-K articles — fetch more for temporal queries
+    n_fetch = max(req.n_results * 3, 15) if is_temporal_query(req.question) else req.n_results
     raw = _collection.query(
         query_embeddings=[q_vec],
-        n_results=req.n_results,
+        n_results=n_fetch,
         include=["documents", "metadatas", "distances"],
     )
+
+    combined = list(zip(raw["metadatas"][0], raw["distances"][0], raw["documents"][0]))
+
+    # For temporal queries, re-sort by date (most recent first), then take top-K
+    if is_temporal_query(req.question):
+        combined.sort(key=lambda x: x[0].get("published_time", ""), reverse=True)
+    combined = combined[:req.n_results]
 
     articles: list[ArticleResult] = []
     article_dicts: list[dict] = []
 
-    for meta, dist, doc in zip(
-        raw["metadatas"][0],
-        raw["distances"][0],
-        raw["documents"][0],
-    ):
+    for meta, dist, doc in combined:
         snippet = doc[:400] + "..." if len(doc) > 400 else doc
         article_dicts.append({
             "title":   meta.get("title", ""),
@@ -145,7 +164,7 @@ def search(req: SearchRequest):
     # 3. Generate answer with LLM
     from langchain_core.messages import SystemMessage, HumanMessage
     messages = [
-        SystemMessage(content=RAG_SYSTEM),
+        SystemMessage(content=get_rag_system()),
         HumanMessage(content=build_rag_prompt(req.question, article_dicts)),
     ]
     answer = _llm.invoke(messages).content.strip()
