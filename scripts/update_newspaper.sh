@@ -34,6 +34,11 @@ echo "🗄️  [3/3] Building ChromaDB..."
 $PYTHON "$DIR/scripts/newspaper_pipeline/create_newspaper_db.py"
 echo ""
 
+# Step 4: Export embeddings for the frontend visualization
+echo "📊 [4/4] Exporting embeddings for visualization..."
+$PYTHON "$DIR/scripts/export_embeddings.py"
+echo ""
+
 echo "============================================"
 echo "✅ Pipeline complete!"
 echo "============================================"
