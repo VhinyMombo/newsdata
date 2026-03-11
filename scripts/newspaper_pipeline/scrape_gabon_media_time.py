@@ -22,7 +22,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent  # scripts/newspaper_pipeline/ → scripts/ → rag/
 DATA_DIR = ROOT_DIR / "Newspaperdata"
 
 BASE_URL = "https://gabonmediatime.com"

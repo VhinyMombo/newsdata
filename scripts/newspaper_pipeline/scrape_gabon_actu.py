@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-Scrape all GabonReview articles published in the last N days, across all categories.
+Scrape GabonActu articles published in the last N days, per category.
 
-The script paginates through each category until it finds no more articles
-matching the target date range. Saves results to Newspaperdata/gabonreview_<start>_to_<end>.csv.
+URL pattern (confirmed working):
+    https://gabonactu.com/blog/category/economie/
+    https://gabonactu.com/blog/category/economie/page/2/
+
+Category is taken from the URL (since each page is category-specific),
+and the article's own `div.cat-links` is used as a fallback.
+
+Saves results to:
+    Newspaperdata/gabonactu_<today>.csv
 
 Usage:
-    python scripts/scrape_gabon_review.py                  # last 3 days, all categories
-    python scripts/scrape_gabon_review.py --days 7         # last 7 days
-    python scripts/scrape_gabon_review.py --categories politique economie
+    python scripts/newspaper_pipeline/scrape_gabon_actu.py              # last 3 days
+    python scripts/newspaper_pipeline/scrape_gabon_actu.py --days 90   # last 90 days
 """
 
 from __future__ import annotations
@@ -23,10 +29,10 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-ROOT_DIR = Path(__file__).parent.parent.parent  # scripts/newspaper_pipeline/ → scripts/ → rag/
+ROOT_DIR = Path(__file__).parent.parent.parent   # rag/
 DATA_DIR = ROOT_DIR / "Newspaperdata"
 
-BASE_URL = "https://www.gabonreview.com"
+BASE_URL = "https://gabonactu.com"
 
 HEADERS = {
     "User-Agent": (
@@ -36,20 +42,21 @@ HEADERS = {
     ),
 }
 
-# All categories visible on the site
+# Category slugs — confirmed URL: /blog/category/<slug>/
 ALL_CATEGORIES = [
     "politique",
     "economie",
-    "societe-et-politique",   # Société
-    "sport",
-    "enviro",                 # Environnement
+    "societe",
+    "sports",
     "culture",
-    "faits_divers",
-    "afrique",
-    "sosconso",
+    "sante",
+    "international",
+    "faits-divers",
 ]
 
 FIELDNAMES = ["category", "title", "published_time", "url", "text"]
+
+SKIP_PATTERNS = {"facebook.com", "twitter.com", "whatsapp", "youtube.com", "#", "?share"}
 
 
 # ---------------------------------------------------------------------------
@@ -57,9 +64,11 @@ FIELDNAMES = ["category", "title", "published_time", "url", "text"]
 # ---------------------------------------------------------------------------
 
 def _get_article_links_from_page(url: str) -> list[str]:
-    """Return unique article URLs found on a single listing page."""
+    """Return deduplicated article URLs from a listing page."""
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
+        if r.status_code == 404:
+            return []
         r.raise_for_status()
     except Exception as e:
         print(f"    [HTTP ERROR] {url}: {e}")
@@ -68,25 +77,19 @@ def _get_article_links_from_page(url: str) -> list[str]:
     soup = BeautifulSoup(r.text, "lxml")
     links: set[str] = set()
 
-    for a in soup.find_all(
-        "a", href=re.compile(r"^https://www\.gabonreview\.com/[a-z0-9]")
-    ):
-        href = a["href"]
-        # Keep only actual article URLs (exclude category / page / author / feed / etc.)
-        if any(x in href for x in ("/category/", "/page/", "/author/", "/feed", "/tag/",
-                                     "/wp-", "/xmlrpc", "/comments/", "/qui-sommes",
-                                     "/mentions-", "/contact/", "/charte-")):
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if any(s in href for s in SKIP_PATTERNS):
             continue
-        # Must end with / and not have # (comment anchors)
-        if "#" in href:
-            continue
-        links.add(href)
+        # Article URLs: /blog/YYYY/MM/DD/slug/
+        if href.startswith(BASE_URL) and re.search(r"/[0-9]{4}/[0-9]{2}/[0-9]{2}/[^/?]+/?$", href):
+            links.add(href.rstrip("/") + "/")
 
     return list(links)
 
 
-def _fetch_article(url: str) -> dict | None:
-    """Fetch and parse a single article page. Returns dict or None on failure."""
+def _fetch_article(url: str, default_category: str) -> dict | None:
+    """Fetch and parse a single article page."""
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
         r.raise_for_status()
@@ -96,27 +99,36 @@ def _fetch_article(url: str) -> dict | None:
 
     soup = BeautifulSoup(r.text, "lxml")
 
-    # Published date
+    # Date
     meta_date = soup.find("meta", property="article:published_time")
     pub_time = meta_date["content"] if meta_date else ""
 
+    # Category — from div.cat-links on article page; fallback to category URL slug
+    cat_div = soup.find("div", class_="cat-links")
+    if cat_div:
+        cat_a = cat_div.find("a")
+        category = (cat_a.get_text(strip=True) if cat_a else cat_div.get_text(strip=True)).lower()
+    else:
+        category = default_category
+
     # Title
-    title = ""
-    if soup.title:
-        title = soup.title.string or ""
-        title = title.replace("| Gabonreview.com | Actualité du Gabon |", "").strip()
-    if not title:
-        h1 = soup.find("h1")
-        title = h1.get_text(strip=True) if h1 else "Sans titre"
+    h1 = soup.find("h1", class_="entry-title") or soup.find("h1")
+    if h1:
+        title = h1.get_text(strip=True)
+    elif soup.title:
+        title = re.sub(r"\s*[-|]\s*Gabonactu.*$", "", soup.title.string or "", flags=re.IGNORECASE).strip()
+    else:
+        title = "Sans titre"
 
     # Body text
-    content_div = soup.find("div", class_=re.compile(r"post-single|entry-content|post-content"))
+    content_div = soup.find("div", class_="entry-content")
     text = ""
     if content_div:
         paragraphs = content_div.find_all("p")
         text = "\n\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
 
     return {
+        "category": category,
         "title": title,
         "url": url,
         "published_time": pub_time,
@@ -125,14 +137,14 @@ def _fetch_article(url: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Main logic
+# Per-category scraping loop
 # ---------------------------------------------------------------------------
 
 def scrape_category(category: str, target_dates: set[str]) -> list[dict]:
     """
-    Paginate through a category, collecting all articles whose published date
-    matches any of the target_dates (set of "YYYY-MM-DD" strings).
-    Stops when two consecutive pages have zero matches.
+    Paginate /blog/category/<slug>/page/N/ and collect articles
+    whose published date falls within target_dates.
+    Stops after 2 consecutive pages with zero matches.
     """
     rows: list[dict] = []
     seen_urls: set[str] = set()
@@ -141,9 +153,9 @@ def scrape_category(category: str, target_dates: set[str]) -> list[dict]:
 
     while True:
         if page == 1:
-            page_url = f"{BASE_URL}/category/{category}/"
+            page_url = f"{BASE_URL}/blog/category/{category}/"
         else:
-            page_url = f"{BASE_URL}/category/{category}/page/{page}/"
+            page_url = f"{BASE_URL}/blog/category/{category}/page/{page}/"
 
         links = _get_article_links_from_page(page_url)
         if not links:
@@ -154,16 +166,15 @@ def scrape_category(category: str, target_dates: set[str]) -> list[dict]:
 
         page_matches = 0
         for url in new_links:
-            article = _fetch_article(url)
+            article = _fetch_article(url, default_category=category)
             if article is None:
                 continue
-            pub = article["published_time"][:10]  # "YYYY-MM-DD"
+            pub = article["published_time"][:10]
             if pub in target_dates:
-                article["category"] = category
                 rows.append(article)
                 page_matches += 1
-                print(f"    ✓ [{pub}] {article['title'][:75]}")
-            time.sleep(0.3)
+                print(f"    ✓ [{pub}] [{article['category']}] {article['title'][:65]}")
+            time.sleep(0.25)
 
         if page_matches == 0:
             consecutive_misses += 1
@@ -178,68 +189,56 @@ def scrape_category(category: str, target_dates: set[str]) -> list[dict]:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Scrape GabonReview articles from the last N days across all categories."
-    )
-    parser.add_argument(
-        "--categories", nargs="+", default=ALL_CATEGORIES,
-        help="Categories to scrape (default: all)",
-    )
-    parser.add_argument(
-        "--days", type=int, default=3,
-        help="Number of days to look back (default: 3, i.e. today + 2 previous days)",
-    )
+    parser = argparse.ArgumentParser(description="Scrape GabonActu by category.")
+    parser.add_argument("--categories", nargs="+", default=ALL_CATEGORIES)
+    parser.add_argument("--days", type=int, default=3, help="Days to look back (default: 3)")
     args = parser.parse_args()
 
     DATA_DIR.mkdir(exist_ok=True)
 
-    # Build the set of target dates
-    today = datetime.now()
-    target_dates: set[str] = set()
-    for i in range(args.days):
-        d = today - timedelta(days=i)
-        target_dates.add(d.strftime("%Y-%m-%d"))
+    now = datetime.now()
+    target_dates: set[str] = {
+        (now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(args.days)
+    }
+    date_min, date_max = min(target_dates), max(target_dates)
 
-    date_min = min(target_dates)
-    date_max = max(target_dates)
-
-    print(f"=== Scraping GabonReview — {date_min} to {date_max} ({args.days} days) ===")
+    print(f"=== Scraping GabonActu — {date_min} → {date_max} ({args.days} days) ===")
     print(f"    Categories: {', '.join(args.categories)}\n")
 
     all_articles: list[dict] = []
     seen_urls: set[str] = set()
 
     for cat in args.categories:
-        print(f"📂 Category: {cat}")
+        print(f"📂 [{cat}]")
         cat_rows = scrape_category(cat, target_dates)
-
-        # Deduplicate (an article can appear in multiple categories)
         new = 0
         for row in cat_rows:
             if row["url"] not in seen_urls:
                 seen_urls.add(row["url"])
                 all_articles.append(row)
                 new += 1
-
         print(f"   → {len(cat_rows)} found, {new} new unique\n")
 
     if not all_articles:
         print("⚠️  No articles found for this period.")
         return
 
-    # Sort by date descending
     all_articles.sort(key=lambda r: r["published_time"], reverse=True)
 
-    today = date.today().isoformat()
-    csv_path = DATA_DIR / f"gabonreview_{today}.csv"
+    today_str = date.today().isoformat()
+    csv_path = DATA_DIR / f"gabonactu_{today_str}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
         writer.writerows(all_articles)
 
     print(f"{'='*60}")
-    print(f"✅ Saved {len(all_articles)} unique articles to {csv_path}")
+    print(f"✅ Saved {len(all_articles)} unique articles → {csv_path}")
 
 
 if __name__ == "__main__":

@@ -47,14 +47,24 @@ print(f"  ✅ {_collection.count()} articles ready  |  LLM: {CHAT_MODEL}")
 
 # ── RAG Prompt ────────────────────────────────────────────────────────────────
 
-TEMPORAL_KEYWORDS = [
-    "aujourd'hui", "du jour", "ce soir", "cette semaine", "ce mois",
-    "récent", "dernier", "dernière", "maintenant", "actuellement", "news", "latest"
-]
-
 def is_temporal_query(question: str) -> bool:
-    q = question.lower()
-    return any(kw in q for kw in TEMPORAL_KEYWORDS)
+    """Uses the LLM to determine if the user is asking for recent or current news."""
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    prompt = (
+        "Tu es un classificateur strict. Réponds UNIQUEMENT par 'OUI' ou 'NON'.\n"
+        "La question suivante demande-t-elle des informations récentes, "
+        "d'actualité (news), d'aujourd'hui, ou les dernières nouvelles ?\n\n"
+        f"Question : {question}"
+    )
+    
+    try:
+        messages = [SystemMessage(content="Tu réponds uniquement par OUI ou NON."), HumanMessage(content=prompt)]
+        response = _llm.invoke(messages).content.strip().upper()
+        return "OUI" in response or "YES" in response
+    except Exception as e:
+        print(f"Error in temporal classification: {e}")
+        return False
 
 
 def get_rag_system() -> str:
@@ -126,8 +136,14 @@ def search(req: SearchRequest):
     q_vec = _embedder.embed_query(req.question)
 
     # 2. Retrieve top-K articles — fetch more for temporal queries
-    n_fetch = max(req.n_results * 3, 15) if is_temporal_query(req.question) else req.n_results
-    raw = _collection.query(
+    # For temporal queries, we fetch a large pool (500) because the semantic match
+    # for words like "news" might otherwise omit today's articles entirely.
+    n_fetch = 500 if is_temporal_query(req.question) else req.n_results
+    
+    # Always fetch the collection fresh to avoid caching stale deleted collection references
+    collection = _client.get_collection(COLLECTION_NAME)
+    
+    raw = collection.query(
         query_embeddings=[q_vec],
         n_results=n_fetch,
         include=["documents", "metadatas", "distances"],

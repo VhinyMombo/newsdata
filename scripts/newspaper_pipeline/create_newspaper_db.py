@@ -62,6 +62,8 @@ def load_newspaper_csvs(paths: list[Path], max_rows: int | None) -> list[Documen
             source = "gabonmediatime"
         elif fname.startswith("gabonreview"):
             source = "gabonreview"
+        elif fname.startswith("gabonactu"):
+            source = "gabonactu"
         else:
             source = "unknown"
 
@@ -126,10 +128,11 @@ def main() -> None:
     default_csvs = sorted(
         list(DATA_DIR.glob("gabonreview_*.csv"))
         + list(DATA_DIR.glob("gabonmediatime_*.csv"))
+        + list(DATA_DIR.glob("gabonactu_*.csv"))
     )
 
     parser = argparse.ArgumentParser(
-        description="Build a Chroma DB from newspaper CSVs (GabonReview + GabonMediaTime)."
+        description="Build a Chroma DB from newspaper CSVs (GabonReview + GabonMediaTime + GabonActu)."
     )
     parser.add_argument(
         "--csv-paths",
