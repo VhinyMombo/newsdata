@@ -10,10 +10,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Viz controls
-  const [method, setMethod] = useState('PCA');
-  const [dim, setDim] = useState('2D');
-  const [colorBy, setColorBy] = useState('category');
+  // Viz controls (Internal state, hidden from general public)
+  const [method, setMethod] = useState('UMAP');
+  const [dim, setDim] = useState('3D');
+  const [colorBy, setColorBy] = useState('cluster_name');
   const [showControls, setShowControls] = useState(false);
 
   // Chat state
@@ -66,7 +66,7 @@ export default function App() {
       setSearchAnswer(json.answer);
       setSearchResults(json.results);
     } catch {
-      setSearchError("Impossible de joindre l'API. Lancez: .venv/bin/python api.py");
+      setSearchError("Impossible de joindre l'API d'Intelligence Artificielle.");
     } finally {
       setSearching(false);
     }
@@ -81,17 +81,17 @@ export default function App() {
     data.points.forEach(pt => {
       const coords = pt.projections[`${method}_${dim}`];
       if (!coords) return;
-      const g = pt[colorBy] || 'unknown';
+      const g = pt[colorBy] || 'Inconnu';
       if (!groups[g]) groups[g] = {
         name: g, x: [], y: [], z: [], text: [], customdata: [],
         hovertemplate: '%{text}<extra></extra>',
-        mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
-        marker: { size: dim === '2D' ? 6 : 3, opacity: highlightUrls.size > 0 ? 0.2 : 0.8, line: { width: 0 } }
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 3, opacity: highlightUrls.size > 0 ? 0.2 : 0.8, line: { width: 0 } }
       };
       groups[g].x.push(coords[0]);
       groups[g].y.push(coords[1]);
-      if (dim === '3D') groups[g].z.push(coords[2]);
-      groups[g].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><i>🔗 Cliquer pour ouvrir</i>`);
+      groups[g].z.push(coords[2]);
+      groups[g].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><i>� Cliquer pour lire l'article</i>`);
       groups[g].customdata.push(pt.url || '');
     });
 
@@ -103,19 +103,18 @@ export default function App() {
         if (!highlightUrls.has(pt.url)) return;
         const coords = pt.projections[`${method}_${dim}`];
         if (!coords) return;
-        hx.push(coords[0]); hy.push(coords[1]);
-        if (dim === '3D') hz.push(coords[2]);
+        hx.push(coords[0]); hy.push(coords[1]); hz.push(coords[2]);
         const rank = (searchResults || []).findIndex(r => r.url === pt.url) + 1;
-        ht.push(`<b>#${rank} — ${pt.title}</b><br><i>🔗 Cliquer pour ouvrir</i>`);
+        ht.push(`<b>Sélection #${rank} : ${pt.title}</b><br><i>� Cliquer pour lire l'article</i>`);
         hd.push(pt.url || '');
       });
       traces.push({
-        name: '🔍 Résultats',
-        x: hx, y: hy, z: dim === '3D' ? hz : undefined,
+        name: '� Vos Résultats',
+        x: hx, y: hy, z: hz,
         text: ht, customdata: hd,
         hovertemplate: '%{text}<extra></extra>',
-        mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
-        marker: { size: dim === '2D' ? 18 : 9, color: '#00adef', opacity: 1, line: { color: '#fff', width: 2 }, symbol: 'star' }
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 10, color: '#10b981', opacity: 1, line: { color: '#ffffff', width: 2 }, symbol: 'diamond' }
       });
     }
     return traces;
@@ -124,20 +123,26 @@ export default function App() {
   // Render Plotly
   useEffect(() => {
     if (!plotRef.current || plotTraces.length === 0) return;
-    const is3D = dim === '3D';
-    const axisStyle = { gridcolor: 'rgba(0,173,239,0.07)', zerolinecolor: 'rgba(0,173,239,0.15)', color: '#4e6278' };
+    const axisStyle = {
+      gridcolor: 'rgba(255,255,255,0.04)',
+      zerolinecolor: 'rgba(255,255,255,0.08)',
+      color: '#64748b',
+      showticklabels: false,
+      title: ''
+    };
     Plotly.react(plotRef.current, plotTraces, {
-      title: { text: `${method} ${dim}`, font: { color: '#94a3b8', family: 'Inter', size: 13 } },
-      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(15,25,35,0.5)',
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
       font: { color: '#94a3b8', family: 'Inter' },
-      hovermode: 'closest', margin: { l: 30, r: 10, b: 30, t: 40 }, showlegend: true,
-      legend: { font: { color: '#fff', size: 10 }, bgcolor: 'rgba(15,25,35,0.9)', bordercolor: 'rgba(0,173,239,0.2)', borderwidth: 1 },
-      ...(is3D ? {
-        scene: {
-          xaxis: { ...axisStyle, title: '' }, yaxis: { ...axisStyle, title: '' }, zaxis: { ...axisStyle, title: '' },
-          bgcolor: 'rgba(15,25,35,0.3)'
-        }
-      } : { xaxis: { ...axisStyle, title: '' }, yaxis: { ...axisStyle, title: '' } })
+      hovermode: 'closest',
+      margin: { l: 0, r: 0, b: 0, t: 0 },
+      showlegend: true,
+      legend: { font: { color: '#f8fafc', size: 11 }, bgcolor: 'rgba(15,23,42,0.8)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1, itemsizing: 'constant' },
+      scene: {
+        xaxis: axisStyle, yaxis: axisStyle, zaxis: axisStyle,
+        bgcolor: 'transparent',
+        camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
+      }
     }, { responsive: true, displayModeBar: false });
 
     plotRef.current.removeAllListeners?.('plotly_click');
@@ -145,7 +150,7 @@ export default function App() {
       const url = e.points[0].customdata;
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
     });
-  }, [plotTraces, method, dim]);
+  }, [plotTraces]);
 
   return (
     <div className="app">
@@ -155,38 +160,29 @@ export default function App() {
         {/* Header */}
         <div className="chat-header">
           <div className="chat-header-left">
-            <Newspaper size={22} className="chat-logo" />
+            <div className="chat-logo-container">
+              <Newspaper size={24} className="chat-logo" />
+            </div>
             <div>
-              <h1 className="chat-title">GABON MEDIA RAG</h1>
-              {data && <span className="chat-subtitle">{data.metadata?.total_articles || 0} articles indexés</span>}
+              <h1 className="chat-title">Gabon Actu IA</h1>
+              {data && <span className="chat-subtitle">{data.metadata?.total_articles.toLocaleString()} articles analysés en 3D</span>}
             </div>
           </div>
-          <button className="controls-toggle" onClick={() => setShowControls(v => !v)} title="Paramètres visualisation">
-            <SlidersHorizontal size={16} />
+          <button className="controls-toggle" onClick={() => setShowControls(v => !v)} title="Options d'affichage">
+            <SlidersHorizontal size={18} />
           </button>
         </div>
 
-        {/* Viz controls (collapsible) */}
+        {/* User-friendly controls */}
         {showControls && (
           <div className="viz-controls">
             <div className="viz-row">
-              <span className="viz-label">Projection</span>
-              <div className="pill-group">
-                {['PCA', 'UMAP'].map(m => <button key={m} className={`pill ${method === m ? 'active' : ''}`} onClick={() => setMethod(m)}>{m}</button>)}
-              </div>
-            </div>
-            <div className="viz-row">
-              <span className="viz-label">Dimensions</span>
-              <div className="pill-group">
-                {['2D', '3D'].map(d => <button key={d} className={`pill ${dim === d ? 'active' : ''}`} onClick={() => setDim(d)}>{d}</button>)}
-              </div>
-            </div>
-            <div className="viz-row">
-              <span className="viz-label">Couleur</span>
+              <span className="viz-label">Colorer la carte par</span>
               <div className="select-wrapper">
                 <select className="select-box" value={colorBy} onChange={e => setColorBy(e.target.value)}>
-                  <option value="category">Catégorie</option>
-                  <option value="source">Source</option>
+                  <option value="cluster_name">Grandes Thématiques (Déduites par l'IA)</option>
+                  <option value="category">Rubriques Classiques</option>
+                  <option value="source">Journal Source</option>
                 </select>
                 <ChevronDown size={14} className="select-icon" />
               </div>
@@ -198,9 +194,17 @@ export default function App() {
         <div className="chat-messages">
           {!searchAnswer && !searchResults && !searching && (
             <div className="chat-empty">
-              <Search size={40} style={{ color: 'var(--accent)', opacity: 0.4, marginBottom: 12 }} />
-              <p className="chat-empty-title">Posez une question</p>
-              <p className="chat-empty-sub">Ex: Que dit-on sur la SEEG? Qui est Kessany? Situation économique?</p>
+              <div className="chat-empty-icon">
+                <Search size={32} />
+              </div>
+              <p className="chat-empty-title">Que souhaitez-vous savoir ?</p>
+              <p className="chat-empty-sub">Posez-moi une question sur l'actualité du Gabon. Je chercherai les meilleures sources pour vous répondre.</p>
+
+              <div className="chat-suggestions">
+                <button className="suggestion-chip" onClick={() => setQuestion("Que dit-on sur la SEEG et les délestages ?")}>💡 La SEEG et l'énergie</button>
+                <button className="suggestion-chip" onClick={() => setQuestion("Quelles sont les dernières actualités sportives du pays ?")}>💡 Dernières infos sport</button>
+                <button className="suggestion-chip" onClick={() => setQuestion("Que pense le gouvernement de la dette ?")}>💡 Le gouvernement et la dette</button>
+              </div>
             </div>
           )}
 

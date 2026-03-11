@@ -52,9 +52,10 @@ def is_temporal_query(question: str) -> bool:
     from langchain_core.messages import SystemMessage, HumanMessage
     
     prompt = (
-        "Tu es un classificateur strict. Réponds UNIQUEMENT par 'OUI' ou 'NON'.\n"
-        "La question suivante demande-t-elle des informations récentes, "
-        "d'actualité (news), d'aujourd'hui, ou les dernières nouvelles ?\n\n"
+        "Tu es un analyseur d'intention de recherche. Réponds UNIQUEMENT par 'OUI' ou 'NON'.\n"
+        "L'utilisateur demande-t-il spécifiquement des nouvelles récentes, fraîches, de l'actualité, "
+        "ou utilise-t-il des mots comme 'récemment', 'aujourd'hui', 'dernier', 'news' ?\n"
+        "Si la question implique une dimension temporelle courte (récent/actuel), réponds OUI.\n\n"
         f"Question : {question}"
     )
     

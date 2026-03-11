@@ -10,10 +10,15 @@ Usage:
 import json
 from pathlib import Path
 
+import os
 import numpy as np
 import chromadb
 import umap
 from sklearn.decomposition import PCA
+from sklearn.cluster import HDBSCAN
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_ollama.chat_models import ChatOllama
+
 
 ROOT_DIR = Path(__file__).parent.parent
 PERSIST_DIR = ROOT_DIR / "newspaper_chroma_db"
@@ -58,6 +63,47 @@ def main() -> None:
     umap3 = umap.UMAP(n_components=3, min_dist=0.1, n_neighbors=min(15, n_samples-1), metric="cosine", random_state=42).fit_transform(X)
 
     # ---------------------------------------------------------
+    # Clustering (HDBSCAN on UMAP 3D) & LLM Naming
+    # ---------------------------------------------------------
+    print("Computing HDBSCAN clustering on UMAP 3D...")
+    clusterer = HDBSCAN(min_cluster_size=15, min_samples=10)
+    cluster_labels = clusterer.fit_predict(umap3)
+    
+    unique_clusters = set(cluster_labels)
+    cluster_names = {}
+    
+    print("Generating cluster names with Llama3...")
+    llm = ChatOllama(model=os.getenv('OLLAMA_CHAT_MODEL', 'llama3'), temperature=0.0)
+    
+    for c_id in unique_clusters:
+        if c_id == -1:
+            cluster_names[c_id] = "Divers / Non-classé"
+            continue
+            
+        # Get up to 40 random titles from this cluster to prompt the LLM
+        indices = np.where(cluster_labels == c_id)[0]
+        sample_indices = np.random.choice(indices, min(40, len(indices)), replace=False)
+        sample_titles = [data["metadatas"][idx].get("title", "") for idx in sample_indices]
+        titles_text = "\n".join(f"- {t}" for t in sample_titles if t)
+        
+        prompt = (
+            "Voici une liste de titres d'articles d'actualité gabonaise qui ont été regroupés par une IA.\n"
+            "Déduis le thème ou le sujet principal commun à ces articles.\n"
+            "Réponds UNIQUEMENT par un nom court, explicite et percutant de 1 à 4 mots maximum (ex: 'Politique Économique', 'Faits Divers', 'Éducation Nationale').\n"
+            "Ne justifie pas ta réponse, donne uniquement le nom de la catégorie.\n\n"
+            f"Titres :\n{titles_text}"
+        )
+        
+        try:
+            msg = [SystemMessage(content="Tu es un journaliste synthétique."), HumanMessage(content=prompt)]
+            name = llm.invoke(msg).content.strip().replace('"', '').replace("'", "")
+            cluster_names[c_id] = name
+            print(f"  Cluster {c_id} ({len(indices)} articles) -> {name}")
+        except Exception as e:
+            print(f"  Error naming cluster {c_id}: {e}")
+            cluster_names[c_id] = f"Cluster {c_id}"
+
+    # ---------------------------------------------------------
     # Assemble JSON Payload
     # ---------------------------------------------------------
     print("Formatting data for export...")
@@ -77,12 +123,15 @@ def main() -> None:
         if len(doc) > 400:
             doc_snippet += "..."
             
+        c_id = cluster_labels[i]
+            
         point = {
             "id": data["ids"][i],
             "title": meta.get("title", ""),
             "date": meta.get("published_time", "")[:10],
             "category": meta.get("category", "unknown"),
             "source": meta.get("source", "unknown"),
+            "cluster_name": cluster_names[c_id],
             "url": meta.get("source_url", ""),
             "snippet": doc_snippet,
             "projections": {
