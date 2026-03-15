@@ -24,8 +24,8 @@ from pydantic import BaseModel
 ROOT_DIR = Path(__file__).parent
 PERSIST_DIR = ROOT_DIR / "newspaper_chroma_db"
 COLLECTION_NAME = "newspaper_gabon"
-EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "embeddinggemma")
-CHAT_MODEL  = os.getenv("OLLAMA_CHAT_MODEL", "llama3")
+EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "embeddinggemma") #embeddinggemma
+CHAT_MODEL  = os.getenv("OLLAMA_CHAT_MODEL", "llama3") #llama3
 
 app = FastAPI(title="Gabon Media RAG API")
 
@@ -48,25 +48,34 @@ print(f"  ✅ {_collection.count()} articles ready  |  LLM: {CHAT_MODEL}")
 # ── RAG Prompt ────────────────────────────────────────────────────────────────
 
 def is_temporal_query(question: str) -> bool:
-    """Uses the LLM to determine if the user is asking for recent or current news."""
-    from langchain_core.messages import SystemMessage, HumanMessage
-    
-    prompt = (
-        "Tu es un analyseur d'intention de recherche. Réponds UNIQUEMENT par 'OUI' ou 'NON'.\n"
-        "L'utilisateur demande-t-il spécifiquement des nouvelles récentes, fraîches, de l'actualité, "
-        "ou utilise-t-il des mots comme 'récemment', 'aujourd'hui', 'dernier', 'news' ?\n"
-        "Si la question implique une dimension temporelle courte (récent/actuel), réponds OUI.\n\n"
-        f"Question : {question}"
-    )
-    
-    try:
-        messages = [SystemMessage(content="Tu réponds uniquement par OUI ou NON."), HumanMessage(content=prompt)]
-        response = _llm.invoke(messages).content.strip().upper()
-        return "OUI" in response or "YES" in response
-    except Exception as e:
-        print(f"Error in temporal classification: {e}")
-        return False
+    """Return True if the question asks for recent/current news."""
 
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    system_prompt = (
+        "Tu es un classificateur d'intention. "
+        "Réponds uniquement par OUI ou NON. "
+        "Aucun autre mot."
+    )
+    user_prompt = (
+        "La question suivante demande-t-elle des informations récentes "
+        "(actualité, aujourd'hui, récemment, dernière news, en ce moment) ?\n\n"
+        f"Question : {question}\n\n"
+        "Réponse :"
+    )
+    try:
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+
+        response = _llm.invoke(messages).content.strip().upper()
+
+        return response.startswith("OUI") or response.startswith("YES")
+
+    except Exception as e:
+        print(f"Temporal classification error: {e}")
+        return False
 
 def get_rag_system() -> str:
     today = date.today().strftime("%d %B %Y")
@@ -77,30 +86,65 @@ Tu reçois une question d'un utilisateur et des extraits d'articles de presse r�
 
 Règles impératives :
 - Réponds uniquement à partir des informations présentes dans les articles fournis.
-- Si les articles ne permettent pas de répondre, dis-le clairement.
-- Pour les questions sur "les news du jour" ou "aujourd'hui", base-toi en priorité sur les articles les plus récents.
+- N'invente aucune information et n'utilise pas de connaissances externes.
+- Si les articles ne permettent pas de répondre, dis clairement : 
+  "Les articles fournis ne permettent pas de répondre à cette question."
+- Pour les questions sur "les news du jour", "aujourd'hui", ou l'actualité récente, base-toi en priorité sur les articles les plus récents.
+- Si les extraits contiennent des dates différentes, privilégie les informations les plus récentes.
+- Si plusieurs articles apportent des informations complémentaires, combine-les de manière cohérente.
+
+Rédaction :
 - Rédige une réponse synthétique, fluide et bien structurée en français.
-- Ne liste pas les sources (elles sont affichées séparément).
 - Sois factuel, objectif et concis (4 à 7 phrases).
+- Ne liste pas les sources et ne mentionne pas les documents (ils sont affichés séparément).
 """
 
 def build_rag_prompt(question: str, articles: list[dict]) -> str:
     context_blocks = []
+
     for i, art in enumerate(articles, 1):
+        full_text = art.get("full_text", art["snippet"])
+        text_for_llm = full_text[:2500]
+
         block = (
-            f"[Article {i}] {art['title']} ({art['date']}, {art['source']})\n"
-            f"{art['snippet'][:400]}"
+            f"[Article {i}]\n"
+            f"Titre : {art['title']}\n"
+            f"Date : {art['date']}\n"
+            f"Source : {art['source']}\n\n"
+            f"{text_for_llm}"
         )
+
         context_blocks.append(block)
 
-    context = "\n\n".join(context_blocks)
+    context = "\n\n---------------------\n\n".join(context_blocks)
+
     return (
-        f"Contexte — articles de presse récents :\n\n{context}\n\n"
+        "Tu es l'assistant journalistique du média 'Kiosque Gabonais'.\n\n"
+
+        "MISSION :\n"
+        "Répondre à la question de l'utilisateur en utilisant uniquement les informations "
+        "présentes dans les articles fournis.\n\n"
+
+        "RÈGLES STRICTES :\n"
+        "- Utilise uniquement les informations présentes dans les articles.\n"
+        "- N'invente aucune information.\n"
+        "- N'utilise pas de connaissances extérieures.\n"
+        "- Si la réponse n'est pas dans les articles, répond exactement : "
+        "'Les articles fournis ne contiennent pas cette information.'\n"
+        "- Si plusieurs articles contiennent des informations pertinentes, combine-les.\n"
+        "- Si les articles ont des dates différentes, privilégie les informations les plus récentes.\n"
+        "- Utilise les noms, chiffres et faits présents dans les articles.\n\n"
+
+        "STYLE :\n"
+        "- Réponse journalistique claire et factuelle.\n"
+        "- 4 à 6 phrases maximum.\n"
+        "- Pas de liste.\n"
+        "- Ne mentionne pas les sources ni les numéros d'articles.\n\n"
+
+        f"=== ARTICLES ===\n{context}\n=== FIN ARTICLES ===\n\n"
         f"Question : {question}\n\n"
-        f"Réponds en te basant uniquement sur les articles ci-dessus."
+        "Réponse :"
     )
-
-
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class SearchRequest(BaseModel):
@@ -136,12 +180,9 @@ def search(req: SearchRequest):
     # 1. Embed question
     q_vec = _embedder.embed_query(req.question)
 
-    # 2. Retrieve top-K articles — fetch more for temporal queries
-    # For temporal queries, we fetch a large pool (500) because the semantic match
-    # for words like "news" might otherwise omit today's articles entirely.
-    n_fetch = 500 if is_temporal_query(req.question) else req.n_results
+    # 2. Retrieve candidates — fetch a larger pool to filter by relevance
+    n_fetch = 80 if is_temporal_query(req.question) else 15
     
-    # Always fetch the collection fresh to avoid caching stale deleted collection references
     collection = _client.get_collection(COLLECTION_NAME)
     
     raw = collection.query(
@@ -152,10 +193,15 @@ def search(req: SearchRequest):
 
     combined = list(zip(raw["metadatas"][0], raw["distances"][0], raw["documents"][0]))
 
-    # For temporal queries, re-sort by date (most recent first), then take top-K
+    # For temporal queries, re-sort by date (most recent first)
     if is_temporal_query(req.question):
         combined.sort(key=lambda x: x[0].get("published_time", ""), reverse=True)
-    combined = combined[:req.n_results]
+        combined = combined[:req.n_results]
+    else:
+        # Keep only articles with good relevance (distance < 1.2), cap at 10
+        RELEVANCE_THRESHOLD = 1.2
+        combined = [(m, d, doc) for m, d, doc in combined if d < RELEVANCE_THRESHOLD]
+        combined = combined[:10]
 
     articles: list[ArticleResult] = []
     article_dicts: list[dict] = []
@@ -163,10 +209,11 @@ def search(req: SearchRequest):
     for meta, dist, doc in combined:
         snippet = doc[:400] + "..." if len(doc) > 400 else doc
         article_dicts.append({
-            "title":   meta.get("title", ""),
-            "date":    meta.get("published_time", "")[:10],
-            "source":  meta.get("source", ""),
-            "snippet": snippet,
+            "title":     meta.get("title", ""),
+            "date":      meta.get("published_time", "")[:10],
+            "source":    meta.get("source", ""),
+            "snippet":   snippet,
+            "full_text": doc,
         })
         articles.append(ArticleResult(
             title    = meta.get("title", ""),
@@ -178,13 +225,29 @@ def search(req: SearchRequest):
             distance = round(dist, 4),
         ))
 
-    # 3. Generate answer with LLM
-    from langchain_core.messages import SystemMessage, HumanMessage
-    messages = [
-        SystemMessage(content=get_rag_system()),
-        HumanMessage(content=build_rag_prompt(req.question, article_dicts)),
-    ]
-    answer = _llm.invoke(messages).content.strip()
+    # 3. Generate answer with LLM (only if we have relevant articles)
+    if not article_dicts:
+        answer = "Aucun article pertinent n'a été trouvé pour cette recherche."
+    else:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        messages = [
+            SystemMessage(content=get_rag_system()),
+            HumanMessage(content=build_rag_prompt(req.question, article_dicts)),
+        ]
+        answer = _llm.invoke(messages).content.strip()
+
+        # If the LLM says it can't answer, don't show sources
+        NO_ANSWER_MARKERS = [
+            "ne contiennent pas cette information",
+            "ne contiennent pas d'information",
+            "pas d'informations",
+            "aucune information",
+            "ne permettent pas de répondre",
+            "je ne dispose pas",
+            "pas en mesure de répondre",
+        ]
+        if any(marker in answer.lower() for marker in NO_ANSWER_MARKERS):
+            articles = []
 
     return SearchResponse(question=req.question, answer=answer, results=articles)
 

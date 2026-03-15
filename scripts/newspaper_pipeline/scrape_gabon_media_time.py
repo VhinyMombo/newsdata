@@ -230,8 +230,8 @@ def main() -> None:
 
     all_articles.sort(key=lambda r: r["published_time"], reverse=True)
 
-    today = date.today().isoformat()
-    csv_path = DATA_DIR / f"gabonmediatime_{today}.csv"
+    today_str = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    csv_path = DATA_DIR / f"gabonmediatime_{today_str}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()

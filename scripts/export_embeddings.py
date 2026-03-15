@@ -66,14 +66,18 @@ def main() -> None:
     # Clustering (HDBSCAN on UMAP 3D) & LLM Naming
     # ---------------------------------------------------------
     print("Computing HDBSCAN clustering on UMAP 3D...")
-    clusterer = HDBSCAN(min_cluster_size=15, min_samples=10)
+    # Adjust cluster parameters based on dataset size for better small-dataset performance
+    min_cluster = min(15, max(3, n_samples // 5)) 
+    min_samp = max(2, min_cluster // 2)
+    clusterer = HDBSCAN(min_cluster_size=min_cluster, min_samples=min_samp)
     cluster_labels = clusterer.fit_predict(umap3)
     
     unique_clusters = set(cluster_labels)
     cluster_names = {}
     
-    print("Generating cluster names with Llama3...")
-    llm = ChatOllama(model=os.getenv('OLLAMA_CHAT_MODEL', 'llama3'), temperature=0.0)
+
+    print("Generating cluster names with llama3...")
+    llm = ChatOllama(model=os.getenv('OLLAMA_CHAT_MODEL', 'llama3'), temperature=0.2)
     
     for c_id in unique_clusters:
         if c_id == -1:
@@ -87,11 +91,24 @@ def main() -> None:
         titles_text = "\n".join(f"- {t}" for t in sample_titles if t)
         
         prompt = (
-            "Voici une liste de titres d'articles d'actualité gabonaise qui ont été regroupés par une IA.\n"
-            "Déduis le thème ou le sujet principal commun à ces articles.\n"
-            "Réponds UNIQUEMENT par un nom court, explicite et percutant de 1 à 4 mots maximum (ex: 'Politique Économique', 'Faits Divers', 'Éducation Nationale').\n"
-            "Ne justifie pas ta réponse, donne uniquement le nom de la catégorie.\n\n"
-            f"Titres :\n{titles_text}"
+            "Tu es un expert en analyse de presse.\n"
+            "On te donne une liste de titres d’articles d’actualité gabonaise regroupés automatiquement.\n"
+            "Ta tâche est d’identifier le thème principal commun à ces titres.\n\n"
+
+            "Règles :\n"
+            "- Réponds par un seul nom de catégorie.\n"
+            "- Maximum 1 à 4 mots.\n"
+            "- La catégorie doit être claire, concise et explicite.\n"
+            "- N'ajoute aucune explication.\n"
+            "- N'écris rien d'autre que le nom de la catégorie.\n\n"
+
+            "Exemples de catégories possibles :\n"
+            "Politique, Économie, Faits Divers, Éducation, Santé, Justice, Société, Diplomatie.\n\n"
+
+            "Titres :\n"
+            f"{titles_text}\n\n"
+
+            "Catégorie :"
         )
         
         try:

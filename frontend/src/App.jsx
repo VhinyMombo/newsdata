@@ -85,13 +85,13 @@ export default function App() {
       if (!groups[g]) groups[g] = {
         name: g, x: [], y: [], z: [], text: [], customdata: [],
         hovertemplate: '%{text}<extra></extra>',
-        mode: 'markers', type: 'scatter3d',
-        marker: { size: 3, opacity: highlightUrls.size > 0 ? 0.2 : 0.8, line: { width: 0 } }
+        mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
+        marker: { size: dim === '2D' ? 8 : 5, opacity: highlightUrls.size > 0 ? 0.15 : 1, line: { width: 0 } }
       };
       groups[g].x.push(coords[0]);
       groups[g].y.push(coords[1]);
-      groups[g].z.push(coords[2]);
-      groups[g].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><i>� Cliquer pour lire l'article</i>`);
+      if (dim === '3D') groups[g].z.push(coords[2]);
+      groups[g].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><i>👉 Cliquer pour lire l'article</i>`);
       groups[g].customdata.push(pt.url || '');
     });
 
@@ -103,18 +103,19 @@ export default function App() {
         if (!highlightUrls.has(pt.url)) return;
         const coords = pt.projections[`${method}_${dim}`];
         if (!coords) return;
-        hx.push(coords[0]); hy.push(coords[1]); hz.push(coords[2]);
+        hx.push(coords[0]); hy.push(coords[1]);
+        if (dim === '3D') hz.push(coords[2]);
         const rank = (searchResults || []).findIndex(r => r.url === pt.url) + 1;
-        ht.push(`<b>Sélection #${rank} : ${pt.title}</b><br><i>� Cliquer pour lire l'article</i>`);
+        ht.push(`<b>Sélection #${rank} : ${pt.title}</b><br><i>👉 Cliquer pour lire l'article</i>`);
         hd.push(pt.url || '');
       });
       traces.push({
-        name: '� Vos Résultats',
-        x: hx, y: hy, z: hz,
+        name: '📌 Vos Résultats',
+        x: hx, y: hy, z: dim === '3D' ? hz : undefined,
         text: ht, customdata: hd,
         hovertemplate: '%{text}<extra></extra>',
-        mode: 'markers', type: 'scatter3d',
-        marker: { size: 10, color: '#10b981', opacity: 1, line: { color: '#ffffff', width: 2 }, symbol: 'diamond' }
+        mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
+        marker: { size: dim === '2D' ? 14 : 10, color: '#10b981', opacity: 1, line: { color: '#ffffff', width: 2 }, symbol: 'diamond' }
       });
     }
     return traces;
@@ -123,6 +124,7 @@ export default function App() {
   // Render Plotly
   useEffect(() => {
     if (!plotRef.current || plotTraces.length === 0) return;
+    const is3D = dim === '3D';
     const axisStyle = {
       gridcolor: 'rgba(255,255,255,0.04)',
       zerolinecolor: 'rgba(255,255,255,0.08)',
@@ -131,18 +133,38 @@ export default function App() {
       title: ''
     };
     Plotly.react(plotRef.current, plotTraces, {
+      colorway: [
+        '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4',
+        '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#b91c1c', '#ea580c',
+        '#d97706', '#65a30d', '#059669', '#0891b2', '#2563eb', '#7c3aed',
+        '#c026d3', '#e11d48', '#7f1d1d', '#9a3412', '#92400e', '#3f6212',
+        '#064e3b', '#164e63', '#1e3a8a', '#4c1d95', '#701a75', '#881337'
+      ],
       paper_bgcolor: 'rgba(0,0,0,0)',
       plot_bgcolor: 'rgba(0,0,0,0)',
       font: { color: '#94a3b8', family: 'Inter' },
       hovermode: 'closest',
       margin: { l: 0, r: 0, b: 0, t: 0 },
       showlegend: true,
-      legend: { font: { color: '#f8fafc', size: 11 }, bgcolor: 'rgba(15,23,42,0.8)', bordercolor: 'rgba(255,255,255,0.1)', borderwidth: 1, itemsizing: 'constant' },
-      scene: {
-        xaxis: axisStyle, yaxis: axisStyle, zaxis: axisStyle,
-        bgcolor: 'transparent',
-        camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
-      }
+      legend: {
+        orientation: 'h',
+        y: -0.1, x: 0.5, xanchor: 'center', yanchor: 'top',
+        font: { color: '#f8fafc', size: 10 },
+        bgcolor: 'rgba(15,23,42,0.85)',
+        bordercolor: 'rgba(255,255,255,0.1)',
+        borderwidth: 1,
+        itemsizing: 'constant'
+      },
+      ...(is3D ? {
+        scene: {
+          xaxis: axisStyle, yaxis: axisStyle, zaxis: axisStyle,
+          bgcolor: 'transparent',
+          camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
+        }
+      } : {
+        xaxis: axisStyle,
+        yaxis: axisStyle
+      })
     }, { responsive: true, displayModeBar: false });
 
     plotRef.current.removeAllListeners?.('plotly_click');
@@ -164,8 +186,8 @@ export default function App() {
               <Newspaper size={24} className="chat-logo" />
             </div>
             <div>
-              <h1 className="chat-title">Gabon Actu IA</h1>
-              {data && <span className="chat-subtitle">{data.metadata?.total_articles.toLocaleString()} articles analysés en 3D</span>}
+              <h1 className="chat-title">Le Kiosque Gabonais</h1>
+              {data && <span className="chat-subtitle">{data.metadata?.total_articles.toLocaleString()} articles analysés en {dim}</span>}
             </div>
           </div>
           <button className="controls-toggle" onClick={() => setShowControls(v => !v)} title="Options d'affichage">
@@ -176,6 +198,12 @@ export default function App() {
         {/* User-friendly controls */}
         {showControls && (
           <div className="viz-controls">
+            <div className="viz-row">
+              <span className="viz-label">Format</span>
+              <div className="pill-group">
+                {['2D', '3D'].map(d => <button key={d} className={`pill ${dim === d ? 'active' : ''}`} onClick={() => setDim(d)}>{d}</button>)}
+              </div>
+            </div>
             <div className="viz-row">
               <span className="viz-label">Colorer la carte par</span>
               <div className="select-wrapper">

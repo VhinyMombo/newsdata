@@ -230,7 +230,7 @@ def main() -> None:
 
     all_articles.sort(key=lambda r: r["published_time"], reverse=True)
 
-    today_str = date.today().isoformat()
+    today_str = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     csv_path = DATA_DIR / f"gabonactu_{today_str}.csv"
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
