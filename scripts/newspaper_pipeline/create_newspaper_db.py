@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Build/update a Chroma vector DB from newspaper CSVs (GabonReview + GabonMediaTime).
+Build/update a Chroma vector DB from newspaper data.
 
-Uses upsert() with a URL-based ID so only NEW articles are added on incremental runs —
-existing articles are never duplicated. Use --reset for a full rebuild.
+By default reads from Google Sheets (all 4 source tabs).
+Fall back to local CSVs by passing --csv-paths explicitly.
 
 Usage:
-    python scripts/newspaper_pipeline/create_newspaper_db.py          # incremental update
-    python scripts/newspaper_pipeline/create_newspaper_db.py --reset   # full rebuild
+    python scripts/newspaper_pipeline/create_newspaper_db.py          # reads from Google Sheets
+    python scripts/newspaper_pipeline/create_newspaper_db.py --reset  # full rebuild from Sheets
+    python scripts/newspaper_pipeline/create_newspaper_db.py --csv-paths Newspaperdata/*.csv  # legacy CSV mode
 """
 
 from __future__ import annotations
@@ -35,89 +36,60 @@ def _normalize_str(value: object) -> str:
     return "" if s.lower() == "nan" else s
 
 
-def load_newspaper_csvs(paths: list[Path], max_rows: int | None) -> list[Document]:
-    """Load newspaper CSVs and convert each row into a LangChain Document."""
-    required = {"category", "title", "published_time", "url", "text"}
+def load_from_sheets() -> list[Document]:
+    """Read all articles from Google Sheets and convert to LangChain Documents."""
+    from sheets_client import SheetsClient
+    client = SheetsClient()
+    rows = client.read_all_articles()
+    if not rows:
+        raise ValueError("No articles found in Google Sheets. Have the scrapers run yet?")
+    return _rows_to_documents(rows)
+
+
+def _rows_to_documents(rows: list[dict], source_file: str = "google_sheets") -> list[Document]:
+    """Convert raw row dicts to LangChain Documents with URL deduplication."""
     docs: list[Document] = []
-
-    remaining = max_rows
-    for path in paths:
-        if not path.exists():
-            raise FileNotFoundError(f"CSV file not found: {path}")
-
-        df = pd.read_csv(path)
-        if required - set(df.columns):
-            missing = sorted(required - set(df.columns))
-            raise ValueError(f"{path} missing required columns: {missing}")
-
-        if remaining is not None:
-            if remaining <= 0:
-                break
-            df = df.head(remaining)
-            remaining -= len(df)
-
-        # Derive source name from filename (gabonreview_* → gabonreview, etc.)
-        fname = path.stem.lower()
-        if fname.startswith("gabonmediatime"):
-            source = "gabonmediatime"
-        elif fname.startswith("gabonreview"):
-            source = "gabonreview"
-        elif fname.startswith("gabonactu"):
-            source = "gabonactu"
-        elif fname.startswith("lunion"):
-            source = "lunion"
-        else:
-            source = "unknown"
-
-        for i, row in df.iterrows():
-            category       = _normalize_str(row.get("category"))
-            title          = _normalize_str(row.get("title"))
-            published_time = _normalize_str(row.get("published_time"))
-            url            = _normalize_str(row.get("url"))
-            text           = _normalize_str(row.get("text"))
-
-            if not text:
-                continue
-
-            # Build rich page_content for embedding
-            parts = []
-            if title:
-                parts.append(f"Titre: {title}")
-            if category:
-                parts.append(f"Catégorie: {category}")
-            if published_time:
-                parts.append(f"Date: {published_time[:10]}")
-            parts.append(f"Source: {source}")
-            parts.append(text)
-            page_content = "\n\n".join(parts)
-
-            metadata = {
-                "source":         source,
-                "category":       category,
-                "title":          title,
-                "published_time": published_time,
-                "source_url":     url,
-                "source_file":    str(path),
-                "row":            int(i),
-                "kind":           "newspaper",
-            }
-
-            docs.append(Document(page_content=page_content, metadata=metadata))
-
-    if not docs:
-        raise ValueError("No documents created from CSVs (all rows empty?).")
-
-    # De-duplicate by URL (same article can appear in multiple CSV files)
-    deduped: list[Document] = []
     seen_urls: set[str] = set()
-    for d in docs:
-        url = d.metadata.get("source_url", "")
-        if url in seen_urls:
+
+    for i, row in enumerate(rows):
+        source         = _normalize_str(row.get("source"))
+        category       = _normalize_str(row.get("category"))
+        title          = _normalize_str(row.get("title"))
+        published_time = _normalize_str(row.get("published_time"))
+        url            = _normalize_str(row.get("url"))
+        text           = _normalize_str(row.get("text"))
+
+        if not text or not url or url in seen_urls:
             continue
         seen_urls.add(url)
-        deduped.append(d)
 
-    return deduped
+        parts = []
+        if title:
+            parts.append(f"Titre: {title}")
+        if category:
+            parts.append(f"Catégorie: {category}")
+        if published_time:
+            parts.append(f"Date: {published_time[:10]}")
+        if source:
+            parts.append(f"Source: {source}")
+        parts.append(text)
+        page_content = "\n\n".join(parts)
+
+        metadata = {
+            "source":         source,
+            "category":       category,
+            "title":          title,
+            "published_time": published_time,
+            "source_url":     url,
+            "source_file":    source_file,
+            "row":            i,
+            "kind":           "newspaper",
+        }
+        docs.append(Document(page_content=page_content, metadata=metadata))
+
+    if not docs:
+        raise ValueError("No documents created (all rows were empty or duplicate).")
+    return docs
 
 
 def make_doc_id(url: str) -> str:
@@ -126,23 +98,15 @@ def make_doc_id(url: str) -> str:
 
 
 def main() -> None:
-    # Collect all newspaper CSVs from Newspaperdata/ (both sources)
-    default_csvs = sorted(
-        list(DATA_DIR.glob("gabonreview_*.csv"))
-        + list(DATA_DIR.glob("gabonmediatime_*.csv"))
-        + list(DATA_DIR.glob("gabonactu_*.csv"))
-        + list(DATA_DIR.glob("lunion_*.csv"))
-    )
-
     parser = argparse.ArgumentParser(
-        description="Build a Chroma DB from newspaper CSVs (GabonReview + GabonMediaTime + GabonActu)."
+        description="Build a Chroma DB from Google Sheets data (or local CSVs via --csv-paths)."
     )
     parser.add_argument(
         "--csv-paths",
         type=Path,
         nargs="+",
-        default=default_csvs if default_csvs else [DATA_DIR / "*.csv"],
-        help="One or more CSV paths (default: all newspaper CSVs in Newspaperdata/).",
+        default=None,  # None = use Google Sheets; pass paths to use local CSVs
+        help="Local CSV paths (legacy). Omit to read from Google Sheets.",
     )
     parser.add_argument(
         "--persist-dir",
@@ -181,7 +145,36 @@ def main() -> None:
         shutil.rmtree(persist_dir)
         print("♻️  Removed existing database for full rebuild.")
 
-    docs = load_newspaper_csvs(list(args.csv_paths), max_rows=args.max_rows)
+    # --- Load documents: prefer Google Sheets, fall back to local CSVs ---
+    if args.csv_paths:
+        print(f"💾 Loading from {len(args.csv_paths)} local CSV file(s)...")
+        import pandas as pd
+
+        def load_newspaper_csvs(paths, max_rows):
+            """Legacy CSV loader."""
+            required = {"category", "title", "published_time", "url", "text"}
+            rows = []
+            for path in paths:
+                if not path.exists():
+                    raise FileNotFoundError(f"{path}")
+                df = pd.read_csv(path)
+                fname = path.stem.lower()
+                if fname.startswith("gabonmediatime"): source = "gabonmediatime"
+                elif fname.startswith("gabonreview"): source = "gabonreview"
+                elif fname.startswith("gabonactu"): source = "gabonactu"
+                elif fname.startswith("lunion"): source = "lunion"
+                else: source = "unknown"
+                for _, row in df.iterrows():
+                    r = dict(row)
+                    r["source"] = source
+                    rows.append(r)
+            return _rows_to_documents(rows, source_file="csv")
+
+        docs = load_newspaper_csvs(args.csv_paths, max_rows=args.max_rows)
+    else:
+        print("📊 Reading articles from Google Sheets...")
+        docs = load_from_sheets()
+    print(f"  → {len(docs)} unique articles loaded.")
 
     print(f"Generating embeddings for {len(docs)} articles using '{args.embed_model}'...")
     embedding_model = OllamaEmbeddings(model=args.embed_model)

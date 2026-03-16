@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Plotly from 'plotly.js-dist-min';
-import { Newspaper, Search, ExternalLink, Loader, ChevronDown, Database, SlidersHorizontal } from 'lucide-react';
+import { Newspaper, Search, ExternalLink, Loader, ChevronDown, Database, SlidersHorizontal, BarChart3, Map as MapIcon } from 'lucide-react';
 import './index.css';
 
 const API_URL = 'http://localhost:8000';
@@ -9,8 +9,9 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeView, setActiveView] = useState('explore'); // 'explore' or 'stats'
 
-  // Viz controls (Internal state, hidden from general public)
+  // Viz controls
   const [method, setMethod] = useState('UMAP');
   const [dim, setDim] = useState('3D');
   const [colorBy, setColorBy] = useState('cluster_name');
@@ -27,13 +28,6 @@ export default function App() {
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Scroll chat to bottom when results arrive
-  useEffect(() => {
-    if (searchAnswer || searchResults) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [searchAnswer, searchResults]);
-
   // Load data.json
   useEffect(() => {
     fetch('/data.json')
@@ -45,16 +39,20 @@ export default function App() {
       .catch(err => { setError(err.message); setLoading(false); });
   }, []);
 
-  // Semantic search
+  // Scroll chat
+  useEffect(() => {
+    if ((searchAnswer || searchResults) && activeView === 'explore') {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [searchAnswer, searchResults, activeView]);
+
   const handleSearch = useCallback(async (e) => {
     e?.preventDefault();
     if (!question.trim()) return;
-
     setSearching(true);
     setSearchError(null);
     setSearchResults(null);
     setSearchAnswer(null);
-
     try {
       const res = await fetch(`${API_URL}/search`, {
         method: 'POST',
@@ -66,18 +64,17 @@ export default function App() {
       setSearchAnswer(json.answer);
       setSearchResults(json.results);
     } catch {
-      setSearchError("Impossible de joindre l'API d'Intelligence Artificielle.");
+      setSearchError("Impossible de joindre l'API.");
     } finally {
       setSearching(false);
     }
   }, [question]);
 
-  // Build Plotly traces
+  // Map Data
   const plotTraces = useMemo(() => {
     if (!data || !data.points) return [];
     const highlightUrls = new Set((searchResults || []).map(r => r.url));
     const groups = {};
-
     data.points.forEach(pt => {
       const coords = pt.projections[`${method}_${dim}`];
       if (!coords) return;
@@ -91,12 +88,10 @@ export default function App() {
       groups[g].x.push(coords[0]);
       groups[g].y.push(coords[1]);
       if (dim === '3D') groups[g].z.push(coords[2]);
-      groups[g].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}<br><i>👉 Cliquer pour lire l'article</i>`);
+      groups[g].text.push(`<b>${pt.title}</b><br>${pt.date} — ${pt.source}`);
       groups[g].customdata.push(pt.url || '');
     });
-
     const traces = Object.values(groups);
-
     if (highlightUrls.size > 0) {
       const hx = [], hy = [], hz = [], ht = [], hd = [];
       data.points.forEach(pt => {
@@ -105,198 +100,304 @@ export default function App() {
         if (!coords) return;
         hx.push(coords[0]); hy.push(coords[1]);
         if (dim === '3D') hz.push(coords[2]);
-        const rank = (searchResults || []).findIndex(r => r.url === pt.url) + 1;
-        ht.push(`<b>Sélection #${rank} : ${pt.title}</b><br><i>👉 Cliquer pour lire l'article</i>`);
+        ht.push(`<b>📌 ${pt.title}</b>`);
         hd.push(pt.url || '');
       });
       traces.push({
-        name: '📌 Vos Résultats',
-        x: hx, y: hy, z: dim === '3D' ? hz : undefined,
-        text: ht, customdata: hd,
-        hovertemplate: '%{text}<extra></extra>',
-        mode: 'markers', type: dim === '2D' ? 'scatter' : 'scatter3d',
-        marker: { size: dim === '2D' ? 14 : 10, color: '#10b981', opacity: 1, line: { color: '#ffffff', width: 2 }, symbol: 'diamond' }
+        name: '📌 Vos Résultats', x: hx, y: hy, z: dim === '3D' ? hz : undefined,
+        text: ht, customdata: hd, hovertemplate: '%{text}<extra></extra>', mode: 'markers',
+        type: dim === '2D' ? 'scatter' : 'scatter3d',
+        marker: { size: dim === '2D' ? 14 : 10, color: '#10b981', symbol: 'diamond' }
       });
     }
     return traces;
   }, [data, method, dim, colorBy, searchResults]);
 
-  // Render Plotly
+  // Render Map
   useEffect(() => {
-    if (!plotRef.current || plotTraces.length === 0) return;
+    if (activeView !== 'explore' || !plotRef.current || plotTraces.length === 0) return;
     const is3D = dim === '3D';
-    const axisStyle = {
-      gridcolor: 'rgba(255,255,255,0.04)',
-      zerolinecolor: 'rgba(255,255,255,0.08)',
-      color: '#64748b',
-      showticklabels: false,
-      title: ''
-    };
+    const axisStyle = { gridcolor: 'rgba(0,0,0,0.04)', color: '#64748b', showticklabels: false, title: '' };
     Plotly.react(plotRef.current, plotTraces, {
       colorway: [
         '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4',
-        '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e', '#b91c1c', '#ea580c',
-        '#d97706', '#65a30d', '#059669', '#0891b2', '#2563eb', '#7c3aed',
-        '#c026d3', '#e11d48', '#7f1d1d', '#9a3412', '#92400e', '#3f6212',
-        '#064e3b', '#164e63', '#1e3a8a', '#4c1d95', '#701a75', '#881337'
+        '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'
       ],
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { color: '#94a3b8', family: 'Inter' },
-      hovermode: 'closest',
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#94a3b8', family: 'Inter' }, showlegend: true,
+      legend: { orientation: 'h', y: -0.1, x: 0.5, xanchor: 'center', bgcolor: 'rgba(255,255,255,0.8)' },
       margin: { l: 0, r: 0, b: 0, t: 0 },
-      showlegend: true,
-      legend: {
-        orientation: 'h',
-        y: -0.1, x: 0.5, xanchor: 'center', yanchor: 'top',
-        font: { color: '#f8fafc', size: 10 },
-        bgcolor: 'rgba(15,23,42,0.85)',
-        bordercolor: 'rgba(255,255,255,0.1)',
-        borderwidth: 1,
-        itemsizing: 'constant'
-      },
-      ...(is3D ? {
-        scene: {
-          xaxis: axisStyle, yaxis: axisStyle, zaxis: axisStyle,
-          bgcolor: 'transparent',
-          camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
-        }
-      } : {
-        xaxis: axisStyle,
-        yaxis: axisStyle
-      })
+      ...(is3D ? { scene: { xaxis: axisStyle, yaxis: axisStyle, zaxis: axisStyle, bgcolor: 'transparent' } } : { xaxis: axisStyle, yaxis: axisStyle })
     }, { responsive: true, displayModeBar: false });
-
-    plotRef.current.removeAllListeners?.('plotly_click');
-    plotRef.current.on('plotly_click', (e) => {
+    plotRef.current.on?.('plotly_click', (e) => {
       const url = e.points[0].customdata;
-      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      if (url) window.open(url, '_blank');
     });
-  }, [plotTraces]);
+  }, [plotTraces, activeView, dim]);
+
+  if (loading) return <div className="loading-full"><div className="spinner" /><p>Chargement des données...</p></div>;
 
   return (
-    <div className="app">
-      {/* ── Chat Panel (primary) ─────────────────────── */}
-      <div className="chat-panel">
-
-        {/* Header */}
-        <div className="chat-header">
-          <div className="chat-header-left">
-            <div className="chat-logo-container">
-              <Newspaper size={24} className="chat-logo" />
-            </div>
-            <div>
-              <h1 className="chat-title">Le Kiosque Gabonais</h1>
-              {data && <span className="chat-subtitle">{data.metadata?.total_articles.toLocaleString()} articles analysés en {dim}</span>}
-            </div>
-          </div>
-          <button className="controls-toggle" onClick={() => setShowControls(v => !v)} title="Options d'affichage">
-            <SlidersHorizontal size={18} />
+    <div className="app-container">
+      <nav className="navbar">
+        <div className="nav-left">
+          <Newspaper className="nav-logo" size={20} />
+          <span className="nav-title">Le Kiosque Gabonais</span>
+        </div>
+        <div className="nav-menu">
+          <button className={`nav-item ${activeView === 'explore' ? 'active' : ''}`} onClick={() => setActiveView('explore')}>
+            <MapIcon size={16} /> Carte 2D/3D
+          </button>
+          <button className={`nav-item ${activeView === 'stats' ? 'active' : ''}`} onClick={() => setActiveView('stats')}>
+            <BarChart3 size={16} /> Statistiques
           </button>
         </div>
+        <div style={{ width: 140 }} /> {/* Spacer */}
+      </nav>
 
-        {/* User-friendly controls */}
-        {showControls && (
-          <div className="viz-controls">
-            <div className="viz-row">
-              <span className="viz-label">Format</span>
-              <div className="pill-group">
-                {['2D', '3D'].map(d => <button key={d} className={`pill ${dim === d ? 'active' : ''}`} onClick={() => setDim(d)}>{d}</button>)}
+      <main className="main-content">
+        {activeView === 'explore' ? (
+          <>
+            <div className="chat-panel">
+              <div className="chat-header">
+                <div className="chat-header-left">
+                  <Database size={16} className="chat-logo" />
+                  <span className="chat-subtitle">{data.metadata?.total_articles.toLocaleString()} articles analysés</span>
+                </div>
+                <button className="controls-toggle" onClick={() => setShowControls(v => !v)}>
+                  <SlidersHorizontal size={14} />
+                </button>
               </div>
-            </div>
-            <div className="viz-row">
-              <span className="viz-label">Colorer la carte par</span>
-              <div className="select-wrapper">
-                <select className="select-box" value={colorBy} onChange={e => setColorBy(e.target.value)}>
-                  <option value="cluster_name">Grandes Thématiques (Déduites par l'IA)</option>
-                  <option value="category">Rubriques Classiques</option>
-                  <option value="source">Journal Source</option>
-                </select>
-                <ChevronDown size={14} className="select-icon" />
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Chat messages area */}
-        <div className="chat-messages">
-          {!searchAnswer && !searchResults && !searching && (
-            <div className="chat-empty">
-              <div className="chat-empty-icon">
-                <Search size={32} />
-              </div>
-              <p className="chat-empty-title">Que souhaitez-vous savoir ?</p>
-              <p className="chat-empty-sub">Posez-moi une question sur l'actualité du Gabon. Je chercherai les meilleures sources pour vous répondre.</p>
-
-              <div className="chat-suggestions">
-                <button className="suggestion-chip" onClick={() => setQuestion("Que dit-on sur la SEEG et les délestages ?")}>💡 La SEEG et l'énergie</button>
-                <button className="suggestion-chip" onClick={() => setQuestion("Quelles sont les dernières actualités sportives du pays ?")}>💡 Dernières infos sport</button>
-                <button className="suggestion-chip" onClick={() => setQuestion("Que pense le gouvernement de la dette ?")}>💡 Le gouvernement et la dette</button>
-              </div>
-            </div>
-          )}
-
-          {searching && (
-            <div className="chat-thinking">
-              <Loader size={16} className="spin" />
-              <span>Recherche en cours...</span>
-            </div>
-          )}
-
-          {searchError && <p className="chat-error">{searchError}</p>}
-
-          {searchAnswer && (
-            <div className="msg-ai">
-              <div className="msg-avatar">IA</div>
-              <div className="msg-bubble">
-                <p className="msg-text">{searchAnswer}</p>
-              </div>
-            </div>
-          )}
-
-          {searchResults && searchResults.length > 0 && (
-            <div className="results-section">
-              <p className="results-header">📰 Sources ({searchResults.length} articles)</p>
-              <div className="results-list">
-                {searchResults.map((art, i) => (
-                  <a key={i} href={art.url} target="_blank" rel="noopener noreferrer" className="result-card">
-                    <div className="result-meta">
-                      <span className="result-source">{art.source}</span>
-                      <span className="result-date">{art.date}</span>
+              {showControls && (
+                <div className="viz-controls">
+                  <div className="viz-row">
+                    <span className="viz-label">Format</span>
+                    <div className="pill-group">
+                      {['2D', '3D'].map(d => <button key={d} className={`pill ${dim === d ? 'active' : ''}`} onClick={() => setDim(d)}>{d}</button>)}
                     </div>
-                    <p className="result-title">{art.title}</p>
-                    <div className="result-link"><ExternalLink size={11} /> Ouvrir l'article</div>
-                  </a>
-                ))}
+                  </div>
+                  <div className="viz-row">
+                    <span className="viz-label">Grouper par</span>
+                    <div className="select-wrapper">
+                      <select className="select-box" value={colorBy} onChange={e => setColorBy(e.target.value)}>
+                        <option value="cluster_name">Thématiques IA</option>
+                        <option value="category">Rubriques</option>
+                        <option value="source">Journal</option>
+                      </select>
+                      <ChevronDown size={14} className="select-icon" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="chat-messages">
+                {!searchAnswer && !searchResults && !searching && (
+                  <div className="chat-empty">
+                    <div className="chat-empty-icon"><Search size={24} /></div>
+                    <p className="chat-empty-title">Posez une question</p>
+                    <p className="chat-empty-sub">Ex: Quelles sont les nouvelles sur la SEEG ?</p>
+                  </div>
+                )}
+                {searching && <div className="chat-thinking"><Loader size={14} className="spin" /><span>Analyse...</span></div>}
+                {searchAnswer && (
+                  <div className="msg-ai">
+                    <div className="msg-avatar">IA</div>
+                    <div className="msg-bubble"><p className="msg-text">{searchAnswer}</p></div>
+                  </div>
+                )}
+                {searchResults && (
+                  <div className="results-list">
+                    {searchResults.map((art, i) => (
+                      <a key={i} href={art.url} target="_blank" className="result-card">
+                        <div className="result-meta"><span className="result-source">{art.source}</span><span className="result-date">{art.date}</span></div>
+                        <p className="result-title">{art.title}</p>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <div ref={chatEndRef} />
               </div>
+
+              <form className="chat-input-bar" onSubmit={handleSearch}>
+                <input className="chat-input" placeholder="Questions..." value={question} onChange={e => setQuestion(e.target.value)} disabled={searching} />
+                <button type="submit" className="chat-send-btn" disabled={searching || !question.trim()}>
+                  <Search size={18} />
+                </button>
+              </form>
             </div>
-          )}
+            <div className="plot-panel">
+              <div ref={plotRef} className="plot-container" />
+            </div>
+          </>
+        ) : (
+          <MetricsDashboard data={data} />
+        )}
+      </main>
+    </div>
+  );
+}
 
-          <div ref={chatEndRef} />
-        </div>
+function MetricsDashboard({ data }) {
+  const trendChartRef = useRef(null);
+  const catChartRef = useRef(null);
 
-        {/* Input fixed at bottom */}
-        <form className="chat-input-bar" onSubmit={handleSearch}>
-          <input
-            ref={inputRef}
-            className="chat-input"
-            type="text"
-            placeholder="Posez une question sur l'actualité gabonaise..."
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            disabled={searching}
-          />
-          <button type="submit" className="chat-send-btn" disabled={searching || !question.trim()}>
-            {searching ? <Loader size={18} className="spin" /> : <Search size={18} />}
-          </button>
-        </form>
+  const stats = useMemo(() => {
+    if (!data || !data.points) return null;
+    const sources = {};
+    const days = {};
+    const categories = {}; // { cat: { source: count } }
+
+    const normalizeCategory = (cat) => {
+      if (!cat) return 'Autres';
+      const c = cat.toLowerCase().trim().replace(/['"«»]/g, '');
+      if (c.includes('politique')) return 'Politique';
+      if (c.includes('economie') || c.includes('économie')) return 'Économie';
+      if (c.includes('societe') || c.includes('société') || c.includes('social')) return 'Société';
+      if (c.includes('sport') || c.includes('foot')) return 'Sport';
+      if (c.includes('justice') || c.includes('fait divers') || c.includes('faits_divers') || c.includes('faits divers')) return 'Faits Divers / Justice';
+      if (c.includes('provinces')) return 'Provinces';
+      if (c.includes('culture') || c.includes('musique') || c.includes('cinéma')) return 'Culture';
+      if (c.includes('enviro')) return 'Environnement';
+      if (c.includes('santé') || c.includes('sante')) return 'Santé';
+      if (c.includes('admin') || c.includes('instit')) return 'Administration';
+      if (c.includes('diplomatie')) return 'Diplomatie';
+      if (c.includes('international')) return 'International';
+      if (c.includes('education') || c.includes('formation')) return 'Éducation';
+      if (c.includes('communication') || c.includes('médias')) return 'Communication';
+      if (c.includes('ia') || c.includes('numérique')) return 'IA / Numérique';
+      return cat.charAt(0).toUpperCase() + cat.slice(1);
+    };
+
+    try {
+      data.points.forEach(pt => {
+        if (!pt.source) return;
+        
+        // Total by source
+        sources[pt.source] = (sources[pt.source] || 0) + 1;
+
+        // Daily trend
+        if (pt.date) {
+          const dayKey = pt.date;
+          if (!days[dayKey]) days[dayKey] = {};
+          days[dayKey][pt.source] = (days[dayKey][pt.source] || 0) + 1;
+        }
+
+        // Category distribution
+        const cat = normalizeCategory(pt.category);
+        if (!categories[cat]) categories[cat] = {};
+        categories[cat][pt.source] = (categories[cat][pt.source] || 0) + 1;
+      });
+
+      const sortedDays = Object.keys(days).sort();
+      const sourcesList = Object.keys(sources);
+      // Colors matching user screenshot: blue, teal, pink, orange
+      const colors = { 
+        gabonactu: '#3b82f6', 
+        gabonmediatime: '#06b6d4', 
+        gabonreview: '#d946ef', 
+        lunion: '#f97316' 
+      };
+
+      // 1. Trend Traces
+      const trendTraces = sourcesList.map(src => ({
+        name: src,
+        x: sortedDays,
+        y: sortedDays.map(d => days[d][src] || 0),
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { shape: 'spline', width: 2, color: colors[src] || '#64748b' },
+        marker: { size: 4 }
+      }));
+
+      // 2. Category Traces (Stacked Horizontal Bars as Percentages)
+      const sortedCats = Object.keys(categories).sort((a, b) => {
+        const sumA = Object.values(categories[a]).reduce((s, v) => s + v, 0);
+        const sumB = Object.values(categories[b]).reduce((s, v) => s + v, 0);
+        return sumA - sumB; 
+      });
+
+      const catTraces = sourcesList.map(src => ({
+        name: src,
+        y: sortedCats,
+        x: sortedCats.map(cat => {
+          const totalInCat = Object.values(categories[cat]).reduce((s, v) => s + v, 0);
+          const count = categories[cat][src] || 0;
+          return totalInCat > 0 ? (count / totalInCat) * 100 : 0;
+        }),
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: colors[src] || '#64748b' }
+      }));
+
+      return { trendTraces, catTraces, total: data.points.length, sources };
+    } catch (err) {
+      console.error('Error calculating metrics:', err);
+      return null;
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (!trendChartRef.current || !stats || !stats.trendTraces.length) return;
+    try {
+      Plotly.react(trendChartRef.current, stats.trendTraces, {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        margin: { t: 20, r: 40, l: 60, b: 80 },
+        hovermode: 'x unified',
+        xaxis: { gridcolor: '#f1f5f9', zeroline: false },
+        yaxis: { gridcolor: '#f1f5f9', title: 'Articles par jour' },
+        legend: { orientation: 'h', y: -0.2, x: 0.5, xanchor: 'center' }
+      }, { responsive: true, displayModeBar: false });
+
+      if (catChartRef.current && stats.catTraces.length) {
+        Plotly.react(catChartRef.current, stats.catTraces, {
+          barmode: 'stack',
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          margin: { t: 40, r: 40, l: 150, b: 60 },
+          xaxis: { gridcolor: '#f1f5f9', title: 'Percentage of Articles (%)', range: [0, 100], zeroline: false },
+          yaxis: { gridcolor: '#f1f5f9', automargin: true },
+          title: { text: 'Distribution of Article Categories by News Source', font: { size: 14 } },
+          legend: { orientation: 'v', x: 1.05, y: 1 }
+        }, { responsive: true, displayModeBar: false });
+      }
+    } catch (err) {
+      console.error('Plotly error:', err);
+    }
+  }, [stats]);
+
+  if (!stats) return <div className="metrics-view"><p>Erreur lors du calcul des statistiques. Vérifiez la console.</p></div>;
+
+  return (
+    <div className="metrics-view">
+      <div className="metrics-header">
+        <h2 className="metrics-title">Tableau de bord analytique</h2>
+        <p className="metrics-subtitle">Fréquence de publication quotidienne et répartition thématique</p>
       </div>
 
-      {/* ── Visualization Panel (secondary) ─────────── */}
-      <div className="plot-panel">
-        {loading && <div className="plot-loading"><div className="spinner" /><p>Chargement...</p></div>}
-        {error && <div className="plot-error"><p>{error}</p></div>}
-        {!loading && !error && <div ref={plotRef} className="plot-container" />}
+      <div className="metrics-grid">
+        <div className="stat-card">
+          <span className="stat-label">Total articles</span>
+          <div className="stat-value">{stats?.total.toLocaleString()}</div>
+        </div>
+        {Object.entries(stats?.sources || {}).map(([src, count]) => (
+          <div key={src} className="stat-card">
+            <span className="stat-label">{src}</span>
+            <div className="stat-value">{count.toLocaleString()}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="chart-container">
+        <div className="chart-header">
+          <h3 className="chart-title">Évolution de la publication quotidienne</h3>
+        </div>
+        <div ref={trendChartRef} className="chart-viz" />
+      </div>
+
+      <div className="chart-container" style={{ marginTop: '2rem' }}>
+        <div ref={catChartRef} className="chart-viz" style={{ height: '600px' }} />
       </div>
     </div>
   );

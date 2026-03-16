@@ -332,16 +332,14 @@ def main() -> None:
 
     all_articles.sort(key=lambda r: r["published_time"], reverse=True)
 
-    today_str = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    csv_path = DATA_DIR / f"lunion_{today_str}.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(all_articles)
-
     print(f"{'='*60}")
-    print(f"✅ Saved {len(all_articles)} unique articles → {csv_path}")
+    print(f"📤 Uploading {len(all_articles)} articles to Google Sheets...")
+    from sheets_client import SheetsClient
+    client = SheetsClient()
+    written = client.append_articles("lunion", all_articles, FIELDNAMES)
+    print(f"✅ Done — {written} new rows added to 'lunion' tab")
 
 
 if __name__ == "__main__":
     main()
+

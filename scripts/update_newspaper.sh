@@ -31,33 +31,34 @@ osascript -e 'display notification "Pipeline started! Scraping articles for the 
 
 
 
-# Step 1: Scrape GabonReview
-osascript -e 'display notification "Scraping GabonReview..." with title "Le Kiosque"' || true
-echo "📰 [1/6] Scraping GabonReview..."
-$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_gabon_review.py" --days "$DAYS"
-echo ""
+# Step 1-4: Scrape all sources in parallel
+osascript -e 'display notification "Scraping all sources in parallel..." with title "Le Kiosque"' || true
+echo "📰 [1-4/6] Scraping GabonReview, GabonMediaTime, GabonActu, and L'Union in parallel..."
 
-# Step 2: Scrape GabonMediaTime
-osascript -e 'display notification "Scraping GabonMediaTime..." with title "Le Kiosque"' || true
-echo "📰 [2/6] Scraping GabonMediaTime..."
-$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_gabon_media_time.py" --days "$DAYS"
-echo ""
+$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_gabon_review.py"     --days "$DAYS" > /tmp/gabonreview.log 2>&1 &
+PID1=$!
+$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_gabon_media_time.py" --days "$DAYS" > /tmp/gabonmediatime.log 2>&1 &
+PID2=$!
+$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_gabon_actu.py"       --days "$DAYS" > /tmp/gabonactu.log 2>&1 &
+PID3=$!
+$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_lunion.py"           --days "$DAYS" > /tmp/lunion.log 2>&1 &
+PID4=$!
 
-# Step 3: Scrape GabonActu
-osascript -e 'display notification "Scraping GabonActu..." with title "Le Kiosque"' || true
-echo "📰 [3/6] Scraping GabonActu..."
-$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_gabon_actu.py" --days "$DAYS"
-echo ""
+echo "   → Scrapers running in background (PIDs: $PID1 $PID2 $PID3 $PID4)"
+echo "   → Logs: /tmp/[source].log"
 
-# Step 4: Scrape L'Union
-osascript -e "display notification \"Scraping L'Union...\" with title \"Le Kiosque\"" || true
-echo "📰 [4/6] Scraping L'Union..."
-$PYTHON "$DIR/scripts/newspaper_pipeline/scrape_lunion.py" --days "$DAYS"
+# Wait for all to finish
+wait $PID1 || { echo "❌ GabonReview failed"; cat /tmp/gabonreview.log; exit 1; }
+wait $PID2 || { echo "❌ GabonMediaTime failed"; cat /tmp/gabonmediatime.log; exit 1; }
+wait $PID3 || { echo "❌ GabonActu failed"; cat /tmp/gabonactu.log; exit 1; }
+wait $PID4 || { echo "❌ L'Union failed"; cat /tmp/lunion.log; exit 1; }
+
+echo "✅ All scraping finished successfully."
 echo ""
 
 # Step 5: Rebuild ChromaDB
 osascript -e 'display notification "Building ChromaDB vector database..." with title "Le Kiosque"' || true
-echo "🗄️  [5/6] Building ChromaDB..."
+echo "🗄️  [5/6] Building ChromaDB from Google Sheets..."
 $PYTHON "$DIR/scripts/newspaper_pipeline/create_newspaper_db.py"
 echo ""
 
@@ -74,5 +75,6 @@ echo "============================================"
 
 # Trigger macOS desktop notification
 osascript -e 'display notification "Pipeline completed successfully! New articles have been scraped and the database is updated." with title "Le Kiosque"' || true
+
 
 
