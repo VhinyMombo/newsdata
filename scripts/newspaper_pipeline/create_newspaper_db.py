@@ -18,6 +18,7 @@ import glob
 import hashlib
 import os
 import shutil
+import time
 from pathlib import Path
 
 import chromadb
@@ -34,6 +35,19 @@ def _normalize_str(value: object) -> str:
         return ""
     s = str(value).strip()
     return "" if s.lower() == "nan" else s
+
+
+def published_ts(published_time: str) -> float:
+    """Unix epoch for an ISO published_time string (0.0 if unparseable).
+
+    Stored as numeric metadata so ChromaDB can filter by date range
+    ($gte/$lte only work on numbers, not on the ISO string).
+    """
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(published_time).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
 
 
 def load_from_sheets() -> list[Document]:
@@ -80,6 +94,7 @@ def _rows_to_documents(rows: list[dict], source_file: str = "google_sheets") -> 
             "category":       category,
             "title":          title,
             "published_time": published_time,
+            "published_ts":   published_ts(published_time),
             "source_url":     url,
             "source_file":    source_file,
             "row":            i,
@@ -95,6 +110,60 @@ def _rows_to_documents(rows: list[dict], source_file: str = "google_sheets") -> 
 def make_doc_id(url: str) -> str:
     """Deterministic ID from URL so upsert never creates duplicates."""
     return hashlib.md5(url.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Chunking — embeddinggemma truncates at ~2048 tokens, so long articles
+# indexed whole lose their tail. Documents above CHUNK_THRESHOLD are split
+# into overlapping chunks; each extra chunk carries the title as context.
+# Chunk 0 keeps the article's base ID; extras get "<id>#1", "<id>#2", …
+# ---------------------------------------------------------------------------
+
+CHUNK_THRESHOLD = 6000   # only split documents longer than this
+CHUNK_CHARS     = 4500
+CHUNK_OVERLAP   = 400
+
+
+def chunk_text(text: str) -> list[str]:
+    """Split text into overlapping chunks, preferring paragraph boundaries."""
+    if len(text) <= CHUNK_THRESHOLD:
+        return [text]
+    chunks: list[str] = []
+    start = 0
+    while start < len(text):
+        end = min(start + CHUNK_CHARS, len(text))
+        if end < len(text):
+            brk = text.rfind("\n\n", start + CHUNK_CHARS // 2, end)
+            if brk == -1:
+                dot = text.rfind(". ", start + CHUNK_CHARS // 2, end)
+                brk = dot + 1 if dot != -1 else end
+            end = brk
+        piece = text[start:end].strip()
+        if piece:
+            chunks.append(piece)
+        if end >= len(text):
+            break
+        start = max(end - CHUNK_OVERLAP, start + 1)
+    return chunks
+
+
+def expand_to_chunks(doc_id: str, text: str, meta: dict) -> list[tuple[str, str, dict]]:
+    """Return (id, text, metadata) triples for every chunk of one article."""
+    pieces = chunk_text(text)
+    out = []
+    for ci, piece in enumerate(pieces):
+        if ci == 0:
+            cid, ctext = doc_id, piece
+        else:
+            cid = f"{doc_id}#{ci}"
+            ctext = (
+                f"Titre: {meta.get('title', '')}\n\n"
+                f"[Suite de l'article — partie {ci + 1}]\n\n{piece}"
+            )
+        m = dict(meta)
+        m["chunk"] = ci
+        out.append((cid, ctext, m))
+    return out
 
 
 def main() -> None:
@@ -196,19 +265,47 @@ def main() -> None:
         print("✅ Database already up to date — no new articles to add.")
         return
 
-    new_ids   = [x[0] for x in new_docs]
-    new_texts = [x[1] for x in new_docs]
-    new_metas = [x[2] for x in new_docs]
+    # Expand long articles into chunks before embedding
+    expanded: list[tuple[str, str, dict]] = []
+    for id_, text, meta in new_docs:
+        expanded.extend(expand_to_chunks(id_, text, meta))
 
-    print(f"  → {len(existing)} already in DB, adding {len(new_docs)} new articles...")
-    embeddings = embedding_model.embed_documents(new_texts)
+    new_ids   = [x[0] for x in expanded]
+    new_texts = [x[1] for x in expanded]
+    new_metas = [x[2] for x in expanded]
 
-    collection.upsert(
-        ids=new_ids,
-        embeddings=embeddings,
-        documents=new_texts,
-        metadatas=new_metas,
-    )
+    print(f"  → {len(existing)} already in DB, adding {len(new_docs)} new articles "
+          f"({len(expanded)} chunks)...")
+
+    # Embed in small batches: one giant embed_documents() call can crash the
+    # Ollama runner (EOF on /tokenize). Upsert per batch so a failure mid-run
+    # keeps the progress made — re-running skips already-added IDs.
+    BATCH_SIZE = 64
+    added = 0
+    for start in range(0, len(new_ids), BATCH_SIZE):
+        batch_ids   = new_ids[start:start + BATCH_SIZE]
+        batch_texts = new_texts[start:start + BATCH_SIZE]
+        batch_metas = new_metas[start:start + BATCH_SIZE]
+
+        for attempt in range(3):
+            try:
+                embeddings = embedding_model.embed_documents(batch_texts)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    raise
+                wait = 5 * (attempt + 1)
+                print(f"  ⚠️  Batch failed ({e}); retrying in {wait}s...", flush=True)
+                time.sleep(wait)
+
+        collection.upsert(
+            ids=batch_ids,
+            embeddings=embeddings,
+            documents=batch_texts,
+            metadatas=batch_metas,
+        )
+        added += len(batch_ids)
+        print(f"  … {added}/{len(new_ids)} embedded", flush=True)
 
     total = collection.count()
     print(

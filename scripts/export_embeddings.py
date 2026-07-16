@@ -42,7 +42,17 @@ def main() -> None:
     collection = client.get_collection(name=COLLECTION_NAME)
     
     data = collection.get(include=["embeddings", "metadatas", "documents"])
-    
+
+    # Long articles are indexed as several chunks ("<id>#N"); keep only the
+    # primary chunk so the map shows one point per article.
+    keep = [i for i, m in enumerate(data["metadatas"]) if not m.get("chunk")]
+    data = {
+        "ids":        [data["ids"][i] for i in keep],
+        "embeddings": [data["embeddings"][i] for i in keep],
+        "metadatas":  [data["metadatas"][i] for i in keep],
+        "documents":  [data["documents"][i] for i in keep],
+    }
+
     if len(data["embeddings"]) == 0:
         print("❌ Error: No embeddings found in collection.")
         return

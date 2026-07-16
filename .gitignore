@@ -31,6 +31,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Memory (private context)
+.memory/
+
 # Data and Databases
 data/
 JOdata/
@@ -57,3 +60,14 @@ scripts/main.py
 scripts/plot_document.py
 scripts/test.py
 scripts/test_agent.py
+
+# Local/agent artifacts
+.DS_Store
+MEMORY.md
+.agents/
+graphify-out/
+test_dist.py
+~$*.docx
+
+# Secrets
+credentials.json

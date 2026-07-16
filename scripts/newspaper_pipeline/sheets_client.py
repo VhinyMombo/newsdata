@@ -5,8 +5,7 @@ Reads SHEET_ID from the GOOGLE_SHEETS_ID env var (or falls back to
 looking in credentials.json if a 'SHEET_ID' key is present there).
 Uses the Service Account in credentials.json for authentication.
 
-Each scraper writes to its own tab:
-    gabonreview | gabonmediatime | gabonactu | lunion
+Each scraper writes to its own tab (see ALL_TABS below for the full list).
 
 Usage:
     from scripts.newspaper_pipeline.sheets_client import SheetsClient
@@ -40,7 +39,12 @@ SCOPES = [
 FIELDNAMES = ["category", "title", "published_time", "url", "text"]
 
 # All known source tabs
-ALL_TABS = ["gabonreview", "gabonmediatime", "gabonactu", "lunion"]
+ALL_TABS = [
+    "gabonreview", "gabonmediatime", "gabonactu", "lunion", "depeches241",
+    "7joursinfo", "ethiquemediagabon", "focusgroupemedia",
+    "gabonallsport", "gabonquotidien", "directinfosgabon", "insidenews241",
+    "kongossanews",
+]
 
 # Google Sheets has a hard limit of 50,000 characters per cell.
 # We truncate slightly below that to stay safe.
