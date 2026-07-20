@@ -4,3 +4,4 @@ langchain-chroma
 pandas
 lets-plot
 cairosvg
+slowapi

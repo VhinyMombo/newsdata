@@ -17,12 +17,16 @@ import time
 import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import chromadb
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_ollama.chat_models import ChatOllama
 from langchain_ollama.embeddings import OllamaEmbeddings
@@ -46,10 +50,48 @@ RECENCY_WEIGHT         = float(os.getenv("RECENCY_WEIGHT",         "0.4"))
 RECENCY_HALF_LIFE_DAYS = float(os.getenv("RECENCY_HALF_LIFE_DAYS", "2.0"))
 # Candidates fetched inside a time window before ranking
 TEMPORAL_FETCH_K       = int(os.getenv("TEMPORAL_FETCH_K", "100"))
+# Non-temporal queries get a mild recency nudge too: on evolving topics
+# (dette, nominations…) an older in-depth article often embeds closer than
+# yesterday's update, so pure similarity feeds the LLM stale figures.
+# Similarity stays dominant and the decay is slow — a relevant old article
+# still beats a barely-relevant fresh one.
+NONTEMPORAL_SIM_WEIGHT      = float(os.getenv("NONTEMPORAL_SIM_WEIGHT",      "0.85"))
+NONTEMPORAL_REC_WEIGHT      = float(os.getenv("NONTEMPORAL_REC_WEIGHT",      "0.15"))
+NONTEMPORAL_HALF_LIFE_DAYS  = float(os.getenv("NONTEMPORAL_HALF_LIFE_DAYS",  "45"))
 # Max characters of each article passed to the LLM for answer generation
 ANSWER_EXCERPT_CHARS = int(os.getenv("ANSWER_EXCERPT_CHARS", "4000"))
 # Ollama context window for the chat model (must fit system + 5 articles + question)
 CHAT_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "16384"))
+
+# Gabon has a single fixed offset year-round (WAT, UTC+1, no DST). All "what
+# day is it" logic below (temporal RAG windows, daily report boundaries,
+# "today" prompts) must anchor on Gabon civil time, not the server's system
+# clock — a server running one timezone east (e.g. CEST, UTC+2, common on a
+# European dev machine) sees midnight an hour before Gabon does, so during
+# that hour it silently answers "today" questions as if it were tomorrow.
+GABON_TZ = ZoneInfo("Africa/Libreville")
+
+
+def gabon_now() -> datetime:
+    """Current Gabon wall-clock time, as a naive datetime (tzinfo stripped)
+    so it stays comparable with the naive dates/timestamps already stored
+    from scraping — only the *reference point* changes, not the data shape."""
+    return datetime.now(GABON_TZ).replace(tzinfo=None)
+
+
+def gabon_today() -> date:
+    return gabon_now().date()
+
+
+def gabon_timestamp(dt: datetime) -> float:
+    """Unix epoch for a naive datetime that represents Gabon wall-clock time.
+
+    Plain `naive_dt.timestamp()` assumes the *system's* local timezone for
+    the conversion — on a server one hour east of Gabon (e.g. CEST), that
+    would silently shift every computed epoch by an hour, undoing the point
+    of gabon_now() right at the last step. Re-attach the real timezone first.
+    """
+    return dt.replace(tzinfo=GABON_TZ).timestamp()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("rag-api")
@@ -62,6 +104,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _client_ip(request: Request) -> str:
+    """Rate-limit key: behind the Vite proxy every request arrives from
+    127.0.0.1, so trust the tunnel/proxy headers before the socket address."""
+    return (
+        request.headers.get("cf-connecting-ip")
+        or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        or get_remote_address(request)
+    )
+
+
+# LLM endpoints monopolize the machine for ~10 s per call: cap them per
+# client so one visitor cannot pin the host CPU/GPU indefinitely
+limiter = Limiter(key_func=_client_ip)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Load resources once at startup
 logger.info(f"Loading ChromaDB from {PERSIST_DIR}...")
@@ -137,7 +196,7 @@ def parse_time_window(question: str) -> tuple[float, float] | None:
     Returns None for non-temporal questions.
     """
     q = question.lower()
-    now = datetime.now()
+    now = gabon_now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Explicit month, e.g. "en mars", "mars 2026" → that calendar month
@@ -149,10 +208,10 @@ def parse_time_window(question: str) -> tuple[float, float] | None:
         )
         start = datetime(year, month, 1)
         end = datetime(year + (month == 12), month % 12 + 1, 1)
-        return start.timestamp(), min(end, now).timestamp()
+        return gabon_timestamp(start), gabon_timestamp(min(end, now))
 
     if "hier" in q:
-        return (today - timedelta(days=1)).timestamp(), now.timestamp()
+        return gabon_timestamp(today - timedelta(days=1)), gabon_timestamp(now)
 
     if any(w in q for w in _TODAY_WORDS):
         # Anchor to the newest article so "les nouvelles du jour" still
@@ -164,16 +223,16 @@ def parse_time_window(question: str) -> tuple[float, float] | None:
                 anchor = min(datetime.fromisoformat(latest), today)
             except ValueError:
                 pass
-        return (anchor - timedelta(days=1)).timestamp(), now.timestamp()
+        return gabon_timestamp(anchor - timedelta(days=1)), gabon_timestamp(now)
 
     if any(w in q for w in _MONTH_WORDS):
-        return (today - timedelta(days=30)).timestamp(), now.timestamp()
+        return gabon_timestamp(today - timedelta(days=30)), gabon_timestamp(now)
 
     if any(w in q for w in _WEEK_WORDS):
-        return (today - timedelta(days=7)).timestamp(), now.timestamp()
+        return gabon_timestamp(today - timedelta(days=7)), gabon_timestamp(now)
 
     if any(w in q for w in _FUTURE_WORDS):
-        return (today - timedelta(days=FUTURE_WINDOW_DAYS)).timestamp(), now.timestamp()
+        return gabon_timestamp(today - timedelta(days=FUTURE_WINDOW_DAYS)), gabon_timestamp(now)
 
     return None
 
@@ -202,7 +261,13 @@ def is_followup(question: str) -> bool:
     return q.startswith(_FOLLOWUP_PREFIXES) or bool(_ANAPHORA_RE.search(q))
 
 
-def temporal_rank(items: list[tuple], now_ts: float) -> list[tuple]:
+def temporal_rank(
+    items: list[tuple],
+    now_ts: float,
+    sim_weight: float = SIMILARITY_WEIGHT,
+    rec_weight: float = RECENCY_WEIGHT,
+    half_life_days: float = RECENCY_HALF_LIFE_DAYS,
+) -> list[tuple]:
     """Order (meta, distance, doc) tuples by combined similarity + recency.
 
     A pure date sort lets a barely-relevant article from today beat a highly
@@ -212,14 +277,14 @@ def temporal_rank(items: list[tuple], now_ts: float) -> list[tuple]:
         meta, dist, _ = item
         similarity = max(0.0, 1.0 - dist / 2.0)
         age_days = max(0.0, (now_ts - float(meta.get("published_ts") or 0)) / 86400.0)
-        recency = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
-        return SIMILARITY_WEIGHT * similarity + RECENCY_WEIGHT * recency
+        recency = 0.5 ** (age_days / half_life_days)
+        return sim_weight * similarity + rec_weight * recency
 
     return sorted(items, key=score, reverse=True)
 
 
 def get_rag_system() -> str:
-    today = date.today().strftime("%d %B %Y")
+    today = gabon_today().strftime("%d %B %Y")
     return f"""\
 Tu es l'assistant IA du Kiosque, une plateforme d'actualités du Gabon.
 Aujourd'hui, nous sommes le {today}.
@@ -316,7 +381,10 @@ def build_rag_prompt(question: str, articles: list["ContextArticle"]) -> str:
         "sans précaution oratoire.\n"
         "- Dans le cas contraire (aucun article ne traite le sujet exact demandé), signale-le "
         "en une phrase puis résume ce que les articles disent de plus proche du sujet.\n"
-        "- Combine les informations de tous les articles pertinents et privilégie les faits les plus récents.\n\n"
+        "- Combine les informations de tous les articles pertinents et privilégie les faits les plus récents.\n"
+        "- Si plusieurs articles donnent des chiffres ou des états différents d'un même sujet à des "
+        "dates différentes, commence par le plus récent (avec sa date), puis mentionne l'évolution. "
+        "Ne présente jamais un chiffre ancien comme s'il était l'état actuel.\n\n"
 
         "STYLE :\n"
         "- Réponse journalistique claire, factuelle et structurée.\n"
@@ -551,7 +619,8 @@ def _fetch_code_extracts(ids: list[str]) -> list[ContextArticle]:
 
 
 @app.post("/search", response_model=SearchResponse)
-def search(req: SearchRequest):
+@limiter.limit("30/minute")
+def search(request: Request, req: SearchRequest):
     question = req.question.strip()
     if not question:
         raise HTTPException(status_code=422, detail="La question est vide.")
@@ -627,6 +696,12 @@ def search(req: SearchRequest):
         combined = [
             (m, d, doc) for m, d, doc in combined if d < RELEVANCE_THRESHOLD
         ]
+        combined = temporal_rank(
+            combined, now_ts=time.time(),
+            sim_weight=NONTEMPORAL_SIM_WEIGHT,
+            rec_weight=NONTEMPORAL_REC_WEIGHT,
+            half_life_days=NONTEMPORAL_HALF_LIFE_DAYS,
+        )
     combined = combined[:req.n_results]
 
     articles: list[ArticleResult] = []
@@ -646,7 +721,8 @@ def search(req: SearchRequest):
 
 
 @app.post("/answer")
-def answer(req: AnswerRequest):
+@limiter.limit("6/minute")
+def answer(request: Request, req: AnswerRequest):
     try:
         if req.corpus == "codes":
             context_items = _fetch_code_extracts(req.ids)
@@ -695,7 +771,10 @@ def answer(req: AnswerRequest):
     return StreamingResponse(generate(), media_type="text/plain")
 
 
-_weekly_report_cache: dict = {"key": None, "text": None}
+_report_cache: dict = {
+    "weekly": {"key": None, "text": None},
+    "daily": {"key": None, "text": None},
+}
 
 # Dedicated LLM handle for the weekly report: hard output cap so generation stays
 # bounded. Same num_ctx as the chat handle — a different value would force Ollama
@@ -712,7 +791,7 @@ _report_llm = ChatOllama(
 
 
 def get_weekly_system() -> str:
-    today = date.today().strftime("%d %B %Y")
+    today = gabon_today().strftime("%d %B %Y")
     return f"""\
 Tu es le rédacteur en chef du Kiosque, une plateforme d'actualités gabonaise.
 Nous sommes le {today}. Tu rédiges la revue de presse hebdomadaire à partir
@@ -733,12 +812,14 @@ faits les plus importants de la semaine sans délayer.
 """
 
 
-def _collect_week():
-    """Rows of the last 7 days: (date, source, category, title, url), one per article."""
-    now = datetime.now()
-    start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+def _collect_week(days: int = 7, start: "datetime | None" = None):
+    """Rows since `start` (default: N days back at midnight):
+    (date, source, category, title, url), one per article."""
+    now = gabon_now()
+    if start is None:
+        start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
     res = _collection.get(
-        where={"published_ts": {"$gte": start.timestamp()}},
+        where={"published_ts": {"$gte": gabon_timestamp(start)}},
         include=["metadatas"],
     )
     rows = sorted(
@@ -757,61 +838,115 @@ def _collect_week():
     return start, now, rows
 
 
-def _weekly_messages(start, now, rows):
+def get_daily_system(start: "date | None" = None) -> str:
+    today = gabon_today().strftime("%d %B %Y")
+    if start == gabon_today():
+        covered = "Les titres fournis ont été publiés aujourd'hui."
+    elif start:
+        covered = (f"Les titres fournis datent du {start.strftime('%d %B %Y')} "
+                   "(dernier jour couvert par la collecte).")
+    else:
+        covered = "Les titres fournis sont les plus récents du corpus."
+    return f"""\
+Tu es le rédacteur en chef du Kiosque, une plateforme d'actualités gabonaise.
+Nous sommes le {today}. Tu rédiges le point d'actualité du jour à partir des
+titres les plus récents publiés par la presse gabonaise. {covered}
+
+Règles :
+- Date les faits dès l'ouverture quand ils ne sont pas d'aujourd'hui \
+(ex. « L'actualité du 16 juillet… ») ; ne présente jamais comme étant \
+d'aujourd'hui des faits d'un autre jour.
+- Commence DIRECTEMENT par une ou deux phrases d'ouverture donnant le ton du \
+jour avec les chiffres clés fournis. Pas de préambule, pas de titre général, \
+pas de formule du type 'Voici le point'.
+- Puis 3 à 4 grands thèmes. Intertitre de thème : une courte ligne en gras \
+(**Thème**). N'utilise JAMAIS la syntaxe '#' ni de lignes '---'.
+- Sous chaque thème, 2 à 4 puces synthétisant les faits marquants.
+- Termine par une phrase de conclusion sur ce qui est à suivre.
+- Appuie-toi uniquement sur les titres fournis ; n'invente aucun détail.
+- Français journalistique dense. Vise 250 à 400 mots au total.
+"""
+
+
+def _weekly_messages(start, now, rows, *, daily: bool = False):
     from collections import Counter
     by_source = Counter(r[1] for r in rows)
     by_category = Counter(r[2] for r in rows if r[2])
     by_day = Counter(r[0] for r in rows)
+    period = "DU JOUR" if daily else "DE LA SEMAINE"
     stats_block = (
-        f"CHIFFRES CLÉS DE LA SEMAINE ({start.date()} → {now.date()}) :\n"
+        f"CHIFFRES CLÉS {period} ({start.date()} → {now.date()}) :\n"
         f"- {len(rows)} articles publiés par {len(by_source)} sources\n"
         f"- Jour le plus actif : {max(by_day, key=by_day.get)} ({max(by_day.values())} articles)\n"
         f"- Rubriques dominantes : "
         + ", ".join(f"{c} ({n})" for c, n in by_category.most_common(5))
     )
-    # Cap the prompt size: keep the most recent titles if the week is very dense
+    # Cap the prompt size: keep the most recent titles if the period is very dense
     MAX_TITLES = 300
     titles_block = "\n".join(f"{d} | {s} | {t}" for d, s, c, t, _u in rows[-MAX_TITLES:])
     messages = [
-        SystemMessage(content=get_weekly_system()),
+        SystemMessage(content=get_daily_system(start.date()) if daily else get_weekly_system()),
         HumanMessage(content=(
             f"{stats_block}\n\n"
-            f"=== TITRES DE LA SEMAINE ===\n{titles_block}\n=== FIN DES TITRES ===\n\n"
-            "Rédige la revue de presse hebdomadaire :"
+            f"=== TITRES {period} ===\n{titles_block}\n=== FIN DES TITRES ===\n\n"
+            + ("Rédige le point d'actualité du jour :" if daily
+               else "Rédige la revue de presse hebdomadaire :")
         )),
     ]
     return messages, by_source, by_category, by_day
 
 
-def _maybe_cache_report(cache_key, text: str) -> None:
+def _maybe_cache_report(cache_key, text: str, kind: str = "weekly") -> None:
     # Only cache output that ends like a finished sentence — a stream cut
     # by the context limit would otherwise be served forever
     if text and text[-1] in ".!?»)":
-        _weekly_report_cache["key"] = cache_key
-        _weekly_report_cache["text"] = text
+        _report_cache[kind]["key"] = cache_key
+        _report_cache[kind]["text"] = text
     else:
-        logger.warning("/weekly_report: output looks truncated, not cached")
+        logger.warning(f"/{kind}_report: output looks truncated, not cached")
 
 
-@app.get("/weekly_report")
-def weekly_report():
-    """Stream an LLM-written press review of the last 7 days (titles-based)."""
-    try:
-        start, now, rows = _collect_week()
-    except Exception as e:
-        logger.error(f"/weekly_report fetch error: {e}")
-        raise HTTPException(status_code=500, detail="Erreur lors de la lecture des articles de la semaine.")
+def _collect_report(daily: bool):
+    """Article window for the daily/weekly reports (stream and PDF).
+
+    Daily: strictly today's articles; if today is still empty (morning before
+    the first scrape, publication gap), slide onto the most recent covered
+    day, like /search's "today" anchor. Weekly: the last 7 days.
+    """
+    if not daily:
+        return _collect_week(days=7)
+    today0 = gabon_now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start, now, rows = _collect_week(start=today0)
     if not rows:
-        return StreamingResponse(
-            iter(["Aucun article publié cette semaine dans le corpus."]),
-            media_type="text/plain",
-        )
+        latest = _latest_article_date()
+        if latest:
+            try:
+                anchor = datetime.fromisoformat(latest).replace(
+                    hour=0, minute=0, second=0, microsecond=0)
+                start, now, rows = _collect_week(start=anchor)
+            except ValueError:
+                pass
+    return start, now, rows
+
+
+def _stream_report(kind: str):
+    """Shared implementation of /weekly_report and /daily_report."""
+    daily = kind == "daily"
+    empty_msg = ("Aucun article publié aujourd'hui dans le corpus." if daily
+                 else "Aucun article publié cette semaine dans le corpus.")
+    try:
+        start, now, rows = _collect_report(daily)
+    except Exception as e:
+        logger.error(f"/{kind}_report fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la lecture des articles.")
+    if not rows:
+        return StreamingResponse(iter([empty_msg]), media_type="text/plain")
 
     cache_key = (start.date().isoformat(), len(rows))
-    if _weekly_report_cache["key"] == cache_key:
-        return StreamingResponse(iter([_weekly_report_cache["text"]]), media_type="text/plain")
+    if _report_cache[kind]["key"] == cache_key:
+        return StreamingResponse(iter([_report_cache[kind]["text"]]), media_type="text/plain")
 
-    messages, *_ = _weekly_messages(start, now, rows)
+    messages, *_ = _weekly_messages(start, now, rows, daily=daily)
 
     def generate():
         chunks = []
@@ -819,53 +954,84 @@ def weekly_report():
             for chunk in _report_llm.stream(messages):
                 chunks.append(chunk.content)
                 yield chunk.content
-            _maybe_cache_report(cache_key, "".join(chunks).strip())
+            _maybe_cache_report(cache_key, "".join(chunks).strip(), kind=kind)
         except Exception as e:
-            logger.error(f"/weekly_report LLM error: {e}")
+            logger.error(f"/{kind}_report LLM error: {e}")
             yield "\n\n[Erreur : la génération a été interrompue. Réessayez.]"
 
     return StreamingResponse(generate(), media_type="text/plain")
 
 
-@app.get("/weekly_report/pdf")
-def weekly_report_pdf():
-    """Downloadable PDF: weekly summary text + charts."""
+@app.get("/weekly_report")
+@limiter.limit("4/minute")
+def weekly_report(request: Request):
+    """Stream an LLM-written press review of the last 7 days (titles-based)."""
+    return _stream_report("weekly")
+
+
+@app.get("/daily_report")
+@limiter.limit("4/minute")
+def daily_report(request: Request):
+    """Stream an LLM-written news brief of the last day (titles-based)."""
+    return _stream_report("daily")
+
+
+def _report_pdf(kind: str):
+    """Shared implementation of /weekly_report/pdf and /daily_report/pdf."""
+    daily = kind == "daily"
     try:
-        start, now, rows = _collect_week()
+        start, now, rows = _collect_report(daily)
     except Exception as e:
-        logger.error(f"/weekly_report/pdf fetch error: {e}")
-        raise HTTPException(status_code=500, detail="Erreur lors de la lecture des articles de la semaine.")
+        logger.error(f"/{kind}_report/pdf fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la lecture des articles.")
     if not rows:
-        raise HTTPException(status_code=404, detail="Aucun article publié cette semaine.")
+        raise HTTPException(status_code=404,
+                            detail="Aucun article publié aujourd'hui." if daily
+                            else "Aucun article publié cette semaine.")
 
     cache_key = (start.date().isoformat(), len(rows))
-    messages, by_source, by_category, by_day = _weekly_messages(start, now, rows)
+    messages, by_source, by_category, by_day = _weekly_messages(start, now, rows, daily=daily)
 
-    if _weekly_report_cache["key"] == cache_key:
-        text = _weekly_report_cache["text"]
+    if _report_cache[kind]["key"] == cache_key:
+        text = _report_cache[kind]["text"]
     else:
         try:
             text = _report_llm.invoke(messages).content.strip()
         except Exception as e:
-            logger.error(f"/weekly_report/pdf LLM error: {e}")
+            logger.error(f"/{kind}_report/pdf LLM error: {e}")
             raise HTTPException(status_code=503, detail="La génération du rapport a échoué.")
-        _maybe_cache_report(cache_key, text)
+        _maybe_cache_report(cache_key, text, kind=kind)
 
     try:
         from report_pdf import build_weekly_pdf
         pdf = build_weekly_pdf(text, start, now, len(rows), by_source, by_category, by_day,
-                               articles=rows)
+                               articles=rows, daily=daily)
     except Exception as e:
-        logger.error(f"/weekly_report/pdf build error: {e}")
+        logger.error(f"/{kind}_report/pdf build error: {e}")
         raise HTTPException(status_code=500, detail="Erreur lors de la construction du PDF.")
 
     from fastapi.responses import Response
-    filename = f"lekiosque-revue-semaine-{now.date()}.pdf"
+    filename = (f"lekiosque-point-du-jour-{now.date()}.pdf" if daily
+                else f"lekiosque-revue-semaine-{now.date()}.pdf")
     return Response(
         content=pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/weekly_report/pdf")
+@limiter.limit("4/minute")
+def weekly_report_pdf(request: Request):
+    """Downloadable PDF: weekly summary text + charts."""
+    return _report_pdf("weekly")
+
+
+@app.get("/daily_report/pdf")
+@limiter.limit("4/minute")
+def daily_report_pdf(request: Request):
+    """Downloadable PDF: daily summary text + charts."""
+    return _report_pdf("daily")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@
   --gold: #c9971c;
   --text: #1c241f;
   --text-2: #3a463f;
-  --text-3: #6e7a72;
+  /* 4.5:1+ on every surface it appears on (panel, bg, input field) */
+  --text-3: #5d6961;
   --radius: 12px;
   --radius-sm: 8px;
   --t: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -30,7 +31,10 @@ body {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  /* dvh tracks iOS Safari's real visible viewport; 100vh overshoots it and
+     lets the page slide up under the status bar after keyboard focus */
   height: 100vh;
+  height: 100dvh;
 }
 
 /* ── Layout ────────────────────────────────── */
@@ -38,6 +42,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
 }
 
@@ -57,6 +62,10 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .nav-logo {
@@ -123,8 +132,12 @@ body {
 
 /* ── Chat Panel ─────────────────────────────── */
 .chat-panel {
-  width: 440px;
-  min-width: 440px;
+  /* Flexible so it widens/narrows in step with the plot panel's max-width
+     transition; the plot's huge flex-grow keeps this at its floor whenever
+     the map is open. The floor scales with the viewport: the conversation
+     is the primary task and deserves the primary space */
+  flex: 1 1 0;
+  min-width: clamp(440px, 46vw, 760px);
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -589,6 +602,17 @@ body {
   font-weight: 700;
 }
 
+.msg-writing-tag {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+
 .stream-cursor {
   display: inline-block;
   width: 8px;
@@ -776,6 +800,21 @@ body {
   flex-direction: column;
   gap: 24px;
   background: var(--bg);
+}
+
+/* The scroll container has a fixed height, so its flex children get
+   compressed toward their min-height before overflow kicks in — panels
+   then clip their own charts. Never shrink them; let the column scroll.
+   The .chart-container rule below sets `flex: 1` (basis 0, shrink 1), so
+   direct children need the higher-specificity override to size from
+   their content. */
+.metrics-view > * {
+  flex-shrink: 0;
+}
+
+.metrics-view > .chart-container,
+.metrics-view > .charts-row {
+  flex: none;
 }
 
 .metrics-header {
@@ -1003,6 +1042,17 @@ body {
   text-align: right;
 }
 
+.source-delta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 56px;
+  text-align: right;
+  white-space: nowrap;
+}
+.source-delta.up { color: var(--accent); }
+.source-delta.down { color: #c43d3d; }
+.source-delta.flat { color: var(--text-3); }
+
 /* Side-by-side charts */
 .charts-row {
   display: grid;
@@ -1179,11 +1229,66 @@ body {
   align-items: center;
 }
 
+.chart-header-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .chart-title {
   font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--text);
+}
+
+.report-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-report-row {
+  padding: 12px 18px 0;
+  flex-shrink: 0;
+}
+
+.chat-report-row .weekly-report-btn {
+  flex: 1;
+  justify-content: center;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+}
+
+/* Report side panel — same slide mechanics as .plot-panel */
+.report-panel {
+  flex: 999 1 0%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  display: flex;
+  justify-content: center;
+  transition: max-width 0.45s ease, opacity 0.3s ease;
+}
+
+.report-panel.hidden {
+  max-width: 0%;
+  opacity: 0;
+}
+
+.report-panel-scroll {
+  width: 100%;
+  max-width: 860px;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+
+.chart-note {
+  font-size: 0.82rem;
+  color: var(--text-soft, #6b7280);
+  margin: 4px 0 10px;
+  max-width: 70ch;
 }
 
 .granularity-selector {
@@ -1291,17 +1396,32 @@ body {
 
 /* ── Plot Panel ──────────────────────────────── */
 .plot-panel {
-  flex: 1;
+  flex: 999 1 0%;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  transition: max-width 0.45s ease, opacity 0.3s ease;
+}
+
+.plot-panel.hidden {
+  max-width: 0%;
+  opacity: 0;
 }
 
 .plot-container {
   width: 100%;
   height: 100%;
+}
+
+/* Signal that points are clickable before the user discovers it by accident */
+.plot-container .nsewdrag,
+.plot-container .scatterlayer .points path {
+  cursor: pointer;
 }
 
 .plot-loading,
@@ -1545,9 +1665,6 @@ body {
 }
 
 .chat-panel.full {
-  width: auto;
-  min-width: 0;
-  flex: 1;
   border-right: none;
 }
 
@@ -1639,6 +1756,12 @@ body {
   padding: 18px 22px;
   margin-bottom: 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  animation: report-in 0.35s ease both;
+}
+
+@keyframes report-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: none; }
 }
 
 .weekly-report-head {
@@ -1678,3 +1801,444 @@ body {
 }
 
 .weekly-report-pdf:hover { background: var(--accent-glow); }
+
+/* ── Mobile ──────────────────────────────────────────────────────────────────
+   The desktop layout tiles panels side by side; below 768px everything
+   stacks: chat full-width, map/report as collapsible bottom sheets. */
+@media (max-width: 768px) {
+  /* Navbar: drop the date, tighten the tabs */
+  .navbar { padding: 0 10px; gap: 8px; }
+  .nav-date { display: none; }
+  .nav-title { font-size: 1.05rem; }
+  .nav-item { padding: 7px 10px; font-size: 0.8rem; }
+
+  /* Explore view: stack vertically */
+  .main-content { flex-direction: column; }
+  .chat-panel {
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 0;
+    min-height: 0;
+    border-right: none;
+  }
+
+  /* Map and report open as overlay sheets sliding up over the chat, which
+     keeps its full height; closing uses the existing controls (map toggle
+     in the chat header, ✕ on the report card) */
+  .plot-panel,
+  .report-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 76vh;
+    max-height: 76vh;
+    max-width: 100%;
+    z-index: 60;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.18);
+    transform: translateY(0);
+    /* Opacity fades out well before the slide finishes: WebGL canvases (the
+       3D map) can repaint a frame behind schedule on mobile Safari during a
+       CSS transform, briefly "bleeding" old pixels through; hiding it via
+       opacity early keeps that flicker off-screen instead of visible mid-slide */
+    transition: transform 0.4s ease, opacity 0.18s ease;
+    /* Hints the browser to keep this on its own compositor layer rather
+       than repainting it jointly with the chat underneath */
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+  .plot-panel.hidden,
+  .report-panel.hidden {
+    max-width: 100%;
+    max-height: 76vh;
+    transform: translateY(105%);
+    opacity: 0;
+    transition: transform 0.4s ease, opacity 0.18s ease, visibility 0s linear 0.18s;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .report-panel-scroll { padding: 16px; }
+
+  /* Chat interior */
+  .chat-header { padding: 12px 12px; }
+  .chat-messages { padding: 16px 12px; }
+  .chat-report-row { padding: 10px 12px 0; }
+  .chat-report-row .weekly-report-btn { font-size: 0.72rem; padding: 8px 6px; }
+  .suggestion-chip { max-width: 100%; white-space: normal; }
+  .chat-panel.full .chat-messages,
+  .chat-panel.full .chat-input-bar,
+  .chat-panel.full .api-offline-banner,
+  .chat-panel.full .corpus-switch { max-width: 100%; }
+
+  /* Stats view */
+  .metrics-view { padding: 16px 12px; }
+  .metrics-header { flex-direction: column; align-items: stretch; }
+  .metrics-title { font-size: 1.35rem; }
+  .report-buttons .weekly-report-btn { flex: 1; justify-content: center; }
+  .charts-row { grid-template-columns: 1fr; }
+  .chart-container { padding: 16px 12px; }
+  .chart-header { flex-wrap: wrap; gap: 10px; }
+  .source-bar-label { min-width: 96px; font-size: 0.72rem; }
+  .source-bar-count { min-width: 40px; }
+}
+
+/* Small phones: the navbar is the tightest row, compact it further */
+@media (max-width: 480px) {
+  .navbar { padding: 0 8px; }
+  .nav-title { font-size: 0.95rem; }
+  .nav-item { padding: 6px 8px; font-size: 0.72rem; gap: 5px; }
+  .chat-subtitle { font-size: 0.65rem; }
+}
+
+/* Mobile ergonomics: assistant landing screen */
+@media (max-width: 768px) {
+  /* Hero composition centered like the big chat apps */
+  .chat-empty {
+    justify-content: center;
+    padding: 14px 8px 24px;
+    gap: 4px;
+  }
+  .chat-empty-icon { width: 44px; height: 44px; margin-bottom: 4px; }
+  .chat-empty-icon svg { width: 18px; height: 18px; }
+  .chat-empty-title { font-size: 1.05rem; }
+  .chat-empty-sub { font-size: 0.8rem; margin-bottom: 10px; }
+  .suggestion-chip { padding: 11px 14px; font-size: 0.82rem; }
+
+  /* Report buttons: quieter, thumb-sized. "Rapport de la semaine" doesn't
+     fit on one line at this width with nowrap — let it wrap to two instead
+     of overflowing/clipping */
+  .chat-report-row { gap: 6px; align-items: stretch; }
+  .chat-report-row .weekly-report-btn {
+    padding: 8px 4px;
+    border-radius: 8px;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  /* 16px input stops iOS Safari from zooming the page on focus;
+     safe-area padding clears the home indicator */
+  .chat-input { font-size: 16px; padding: 11px 16px; }
+  .chat-input-bar {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+  .corpus-switch { padding: 6px 12px 0; }
+  .corpus-pill { font-size: 0.74rem; padding: 7px 4px; }
+}
+
+/* ── Landing hero: input centered in the empty state (all screens) ── */
+.chat-empty { justify-content: center; }
+.chat-empty .corpus-switch {
+  width: 100%;
+  max-width: 560px;
+  padding: 10px 0 0;
+}
+.chat-empty .chat-input-bar {
+  width: 100%;
+  max-width: 560px;
+  border-top: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 0 0;
+}
+.chat-empty .chat-suggestions {
+  max-width: 560px;
+  margin-top: 18px;
+}
+
+/* ── Map settings floating on the plot panel ── */
+.plot-panel-settings {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  color: var(--text-2);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: var(--t);
+}
+.plot-panel-settings:hover,
+.plot-panel-settings.active {
+  color: var(--accent);
+  border-color: rgba(22, 111, 67, 0.3);
+}
+
+.plot-controls {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  z-index: 5;
+  width: min(340px, calc(100% - 24px));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 768px) {
+  .plot-controls { top: 56px; left: 12px; right: 12px; width: auto; }
+}
+
+/* ── Wrapping HTML legend (mobile substitute for Plotly's) ── */
+.html-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 2px 0 10px;
+}
+
+.html-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.html-legend-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 3px 9px 3px 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--t);
+}
+.html-legend-btn:hover { background: rgba(0, 0, 0, 0.04); }
+.html-legend-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+.html-legend-reset {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  color: var(--text-3);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.html-legend-reset:hover { color: var(--text); border-color: var(--text-3); }
+
+.html-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ── Accessibility: visible keyboard focus everywhere ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.chat-input:focus-visible,
+.select-box:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+/* ── Map color key overlay ── */
+.plot-legend {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  z-index: 4;
+  margin: 0;
+  padding: 8px 12px;
+  background: rgba(255, 253, 248, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+/* Treemap labels: ellipsis instead of hard clipping */
+.custom-treemap-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Treemap label: block-level so ellipsis actually applies (inline spans
+   ignore max-width and bleed into neighboring cells) */
+.custom-treemap-text {
+  width: 100%;
+  min-width: 0;
+  padding: 0 6px;
+  overflow: hidden;
+}
+.custom-treemap-name { display: block; }
+
+/* Reinforced, reset-proof keyboard focus ring */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(22, 111, 67, 0.22) !important;
+}
+
+/* Screen-reader-only text (semantic headings without visual impact) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Alert KPI card: ingestion problems must catch the eye */
+.stat-card.stat-alert {
+  border: 1px solid rgba(196, 61, 61, 0.35);
+  background: rgba(196, 61, 61, 0.05);
+}
+.stat-card.stat-alert .stat-value { color: #c43d3d; }
+
+/* ── Draggable chat/map divider (desktop) ── */
+.panel-divider {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  z-index: 15;
+}
+.panel-divider:hover { background: var(--accent-glow); }
+
+@media (max-width: 768px) {
+  .panel-divider { display: none; }
+}
+
+/* Map caption inside the legend strip */
+.plot-caption {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-3);
+}
+
+.ai-disclaimer {
+  font-size: 0.76rem;
+  color: var(--text-3);
+  text-align: center;
+  padding: 4px 12px 0;
+}
+
+.msg-copy-btn {
+  display: inline-block;
+  margin-top: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: var(--t);
+}
+.msg-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.chat-empty .ai-disclaimer { padding-top: 6px; }
+
+.plot-panel-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: var(--t);
+}
+.plot-panel-close:hover { color: #c43d3d; border-color: rgba(196, 61, 61, 0.3); }
+
+/* ── Mobile: confirm-open bar for the map (tap → hover selects, this opens) ── */
+.map-open-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 92px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+
+.map-open-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.map-open-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-open-meta {
+  font-size: 0.68rem;
+  color: var(--text-3);
+}
+
+.map-open-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}

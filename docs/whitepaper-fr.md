@@ -2,7 +2,7 @@
 
 ## Une plateforme souveraine d'intelligence documentaire pour la presse gabonaise
 
-**Livre blanc · Version 2.0 · Juillet 2026**
+**Livre blanc · Version 3.0 · Juillet 2026**
 Auteur : Vhiny Mombo
 
 ---
@@ -17,11 +17,11 @@ Trois choix structurent le projet :
 2. **La conscience du temps** : l'actualité est une matière périssable. Le Kiosque implémente un *RAG temporel* complet : extraction de fenêtres de dates depuis la question, filtrage par plage au niveau de l'index, et classement par score composite pertinence × fraîcheur.
 3. **La souveraineté technologique** : l'intégralité de la chaîne (collecte, indexation, recherche, génération) s'exécute localement, sur une seule machine, avec des modèles open source. Aucune donnée ne transite par un service d'IA tiers, et le coût marginal d'une question est nul.
 
-Le corpus presse couvre sept titres gabonais en ligne, soit plus de 10 200 articles collectés en continu depuis décembre 2025. Le corpus juridique compte 1 502 articles de loi issus de cinq codes en vigueur.
+Le corpus presse couvre treize titres gabonais en ligne, soit 18 517 articles au 20 juillet 2026, collectés en continu depuis décembre 2025 (le rattrapage historique remonte à septembre 2025 pour certaines sources). Le corpus juridique compte 1 502 articles de loi issus de cinq codes en vigueur.
 
 ---
 
-## 1. Contexte : une presse riche, un accès fragmenté
+## 1. Contexte et motivations : une presse riche, un accès fragmenté
 
 La presse en ligne gabonaise est vivante et diverse, mais son exploitation reste laborieuse. L'information est éclatée entre des sites indépendants, sans moteur de recherche transversal, sans archives structurées communes, et sans moyen simple de reconstituer la chronologie d'un dossier (une crise de l'eau, une loi de finances, une élection professionnelle) à travers plusieurs rédactions.
 
@@ -29,15 +29,35 @@ Les assistants IA grand public ne comblent ce vide qu'en partie. Équipés d'out
 
 Le Kiosque occupe l'espace entre les deux : un corpus national exhaustif, maîtrisé, archivé et enrichi quotidiennement, interrogeable en langage naturel, dont chaque réponse est ancrée dans des documents identifiés.
 
+### 1.1 Les motivations du projet
+
+Cinq motivations, explicites dès l'origine, structurent le projet :
+
+1. **Rendre exploitable la diversité de la presse gabonaise.** Le paysage médiatique en ligne est d'une abondance remarquable : début 2024, la Haute Autorité de la Communication recensait [169 médias en ligne, dont 29 en situation régulière](https://gabonmediatime.com/gabon-liste-des-29-medias-en-ligne-en-situation-reguliere-sur-169-recenses/). Ce pluralisme est une richesse démocratique, mais il reste théorique pour le lecteur : personne ne consulte des dizaines de sites chaque jour, et chacun se replie en pratique sur deux ou trois titres, avec les angles morts que cela suppose. En agrégeant les rédactions établies dans un corpus unique interrogeable d'une seule question, Le Kiosque transforme cette diversité nominale en diversité effective : chaque réponse confronte les traitements de plusieurs rédactions, et les titres plus modestes apparaissent à égalité avec les plus visibles.
+
+2. **Réduire l'asymétrie d'accès à l'information.** Suivre un dossier (une crise de l'eau, une loi de finances, une nomination) à travers treize rédactions sur plusieurs mois est aujourd'hui un travail de documentaliste, accessible aux seules organisations qui peuvent y consacrer une équipe de veille. La question en langage naturel, la synthèse sourcée et la chronologie automatique mettent ce travail à la portée d'un citoyen, d'un étudiant, d'un journaliste ou d'un chercheur, en quelques secondes et sans compétence technique.
+
+3. **Une IA digne de confiance pour l'information.** Appliquée à l'actualité, l'invention de faits par les modèles de langage n'est pas un défaut tolérable : une affirmation non sourcée sur une nomination ou un chiffre de dette publique est pire qu'inutile. Le choix du RAG strict (répondre uniquement à partir des articles retrouvés, citer chaque source, dater chaque fait) est une position de principe : l'IA doit rendre l'information plus vérifiable, pas moins.
+
+4. **Offrir un observatoire factuel du paysage médiatique.** Un secteur où 169 médias coexistent et où une minorité satisfait aux exigences réglementaires est un secteur qui se connaît mal lui-même : qui publie réellement, à quel rythme, sur quels sujets ? En mesurant en continu la production effective des rédactions (volumes quotidiens, rubriques, cadences comparées, thématiques émergentes), Le Kiosque produit une donnée objective qui manque à tous les acteurs : aux rédactions pour se situer, aux chercheurs et étudiants en sciences de l'information pour travailler sur pièces, aux annonceurs et institutions pour apprécier l'audience réelle du secteur, et au débat public pour parler du paysage médiatique à partir de mesures plutôt que d'impressions.
+
+5. **Faire la preuve d'une faisabilité réplicable.** Le projet démontre qu'une plateforme d'intelligence documentaire nationale (collecte, archivage, recherche sémantique, synthèse par IA, cartographie thématique) peut être construite et opérée par une très petite équipe, avec du matériel ordinaire et des briques open source. La méthode est documentée dans ce livre blanc précisément pour être transposable : à d'autres pays, à d'autres corpus (presse régionale, littérature grise, archives institutionnelles), à d'autres langues.
+
+L'extension aux codes de loi relève de la même logique appliquée au droit : les textes en vigueur existent en PDF au Journal Officiel, mais chercher « ce que dit la loi » article par article reste hors de portée du non-juriste. Le même socle technique les rend interrogeables, avec citation systématique des numéros d'articles.
+
 ---
 
 ## 2. La plateforme
 
 **L'assistant conversationnel.** L'utilisateur pose ses questions en français et choisit son corpus (📰 Presse ou ⚖️ Codes de loi). Le système retrouve les documents pertinents, génère une synthèse en streaming, et affiche les sources directement sous chaque réponse (titre, journal ou code, date, lien vers l'original). La conversation est réellement conversationnelle : les questions de suivi (« et à Port-Gentil ? ») sont interprétées dans le contexte des échanges précédents, et l'historique survit au rechargement de la page.
 
-**La carte sémantique.** Le corpus presse est projeté en deux ou trois dimensions : chaque point est un article, la proximité spatiale reflète la proximité de sens. Les grappes thématiques sont détectées automatiquement et nommées par le modèle de langage. Les articles retrouvés par une recherche s'illuminent sur la carte. La carte est masquable d'un clic pour les usages non techniques, préférence mémorisée par navigateur.
+**La carte sémantique.** Le corpus presse est projeté en deux ou trois dimensions : chaque point est un article, la proximité spatiale reflète la proximité de sens, une légende explique la lecture (« deux points proches traitent de sujets similaires »). Les grappes thématiques sont détectées automatiquement et nommées par le modèle de langage, ou remplacées par la rubrique éditoriale ou le journal au choix. La carte est réellement interactive, pas seulement décorative : cliquer un point ouvre l'article original ; cliquer une entrée de légende isole sa catégorie (le reste du nuage passe en gris neutre, sans disparaître, pour garder le contexte spatial) ; sur mobile, où un tap se confond souvent avec le geste de rotation 3D, le survol/tap sélectionne le point et une barre de confirmation dédiée ouvre l'article en un second tap sûr. Les articles retrouvés par une recherche s'illuminent sur la carte. La carte est masquable d'un clic pour les usages non techniques (repli automatique sur mobile), préférence mémorisée par navigateur et par taille d'écran.
 
-**Le tableau de bord statistique.** Volumes par rubrique et par journal, répartition thématique, couverture temporelle.
+**Le tableau de bord statistique.** Indicateurs clés du corpus (volumes, moyennes, records, activité du jour comparée à sa moyenne pour ce jour de semaine), répartition par journal, évolution de la publication sur fenêtre réglable (30 jours à tout l'historique, au pas journalier ou hebdomadaire), dynamique des sources (aujourd'hui comparé à la moyenne habituelle pour ce jour de semaine, 7 jours, ou volume total), répartition thématique, profil éditorial de chaque rédaction et fraîcheur de la collecte source par source.
+
+**Les rapports éditoriaux.** Deux rapports générés à la demande depuis l'interface : le point d'actualité du jour (strictement les articles du jour, avec repli automatique sur la dernière journée couverte si la collecte n'a pas encore tourné) et la revue de presse hebdomadaire. Chacun est rédigé par le modèle local à partir des titres de la période, streamé dans un panneau dédié, puis exportable en PDF maquetté : couverture, nuage des mots des titres, graphiques commentés, références cliquables vers les articles originaux et note méthodologique.
+
+**L'accessibilité et le multi-écran.** L'interface est pensée pour un lectorat majoritairement mobile : mise en page qui s'empile sur petit écran plutôt que de comprimer deux colonnes, carte et rapports en panneaux plein écran superposables plutôt qu'en colonnes concurrentes, cibles tactiles dimensionnées pour le doigt. Côté lecteurs d'écran et navigation clavier : régions ARIA nommées (`role="log"` pour le fil de conversation, `role="region"` pour la carte), focus visible sur tous les éléments interactifs, `Échap` referme les panneaux ouverts avec retour du focus au bouton d'origine, et les panneaux réduits sont retirés de l'ordre de tabulation (`inert`) plutôt que de laisser des contrôles invisibles mais atteignables au clavier. La génération de réponse est annoncée en direct (`aria-live`) sans lire chaque mot du flux : la phase de recherche est annoncée à chaque étape, puis la réponse complète est lue d'un bloc à la fin du streaming plutôt que mot à mot, ce qui serait inexploitable. Le contraste texte/fond est vérifié au ratio WCAG AA sur l'ensemble de la palette.
 
 ---
 
@@ -45,37 +65,16 @@ Le Kiosque occupe l'espace entre les deux : un corpus national exhaustif, maîtr
 
 ### 3.1 Vue d'ensemble
 
-```
-Sites de presse (7 sources)                    Journal Officiel (7 codes)
-        │  scraping quotidien parallèle                │  scraping ad hoc
-        ▼                                              ▼
-Google Sheets (dépôt central, dédoublonné par URL)   CSV locaux
-        │  indexation incrémentale                     │
-        ▼                                              ▼
-newspaper_chroma_db (10 586 entrées)          codes_chroma_db (1 502 entrées)
-   embeddings : embeddinggemma (Ollama)          même modèle d'embedding
-        │                                              │
-        └────────────────┬─────────────────────────────┘
-                         ▼
-        API FastAPI : /search, /answer, /health
-           • RAG temporel (corpus presse)
-           • prompts spécialisés par corpus
-           • génération : qwen3.5:9b (Ollama), streaming
-                         │
-        ┌────────────────┴────────────────┐
-        ▼                                 ▼
-  Frontend React                   Export hors ligne
-  (chat, carte, stats)             UMAP/PCA + HDBSCAN + thèmes LLM
-```
+![Architecture du Kiosque : deux corpus collectés et indexés localement, servis par une API unique à un frontend interactif et à des exports hors ligne.](architecture-fr.png)
 
 Pile logicielle : Python 3.13, FastAPI + Uvicorn, ChromaDB (persistance locale), LangChain (liaison Ollama), React 19 + Vite, Plotly. Tous les paramètres sensibles (modèles, seuils, poids, port) sont pilotables par variables d'environnement.
 
 ### 3.2 Collecte
 
-Sept scrapers spécialisés s'exécutent en parallèle chaque jour. Deux familles :
+Treize scrapers spécialisés s'exécutent en parallèle chaque jour. Deux familles :
 
-- **Sites WordPress à API REST ouverte** (Dépêches 241, 7 Jours Info) : interrogation directe de `/wp/v2/posts` avec filtre `after=<date>` côté serveur, 50 articles par requête, résolution des catégories via `/wp/v2/categories`. Un module partagé (`wp_rest_scraper.py`) factorise cette logique : ajouter une source WordPress coûte une quinzaine de lignes. Un rattrapage historique de 7 mois représente environ 30 requêtes.
-- **Sites à parcours HTML** (GabonReview, GabonMediaTime, GabonActu, L'Union, Éthique Média) : pagination des pages de rubriques, extraction de la date via la balise `article:published_time`, arrêt après deux pages consécutives sans article dans la fenêtre cible.
+- **Sites WordPress à API REST ouverte** (Dépêches 241, 7 Jours Info, Éthique Média, Focus Groupe Média, Gabon All Sport, Gabon Quotidien, Direct Infos Gabon, Inside News 241, Kongossa News) : interrogation directe de `/wp/v2/posts` avec filtre `after=<date>` côté serveur, 50 articles par requête, résolution des catégories via `/wp/v2/categories`. Un module partagé (`wp_rest_scraper.py`) factorise cette logique : ajouter une source WordPress coûte une quinzaine de lignes. Un rattrapage historique de 7 mois représente environ 30 requêtes ; il a été appliqué aux neuf sources de cette famille.
+- **Sites à parcours HTML** (GabonReview, GabonMediaTime, GabonActu, L'Union) : pagination des pages de rubriques, extraction de la date via la balise `article:published_time`, arrêt après deux pages consécutives sans article dans la fenêtre cible.
 
 Les articles normalisés (rubrique, titre, date ISO, URL, texte intégral) sont versés dans un dépôt central Google Sheets, un onglet par source, qui sert de couche d'audit humaine : le corpus brut est lisible et corrigeable. Le dédoublonnage par URL est appliqué à chaque étage (scraper, Sheets, indexation), ce qui rend toute la chaîne ré-exécutable sans effet de bord. Limite technique gérée : Google Sheets plafonne à 50 000 caractères par cellule ; les textes sont tronqués à 48 000 avec marqueur.
 
@@ -117,6 +116,37 @@ Un article très pertinent d'avant-hier peut ainsi devancer un article vaguement
 
 Les questions sans dimension temporelle suivent le chemin classique : recherche sémantique avec seuil de distance (1,7 pour la presse, 1,9 pour les codes, dont la formulation s'éloigne davantage de celle des requêtes).
 
+**d) Fraîcheur légère pour les questions non temporelles.** La dérive de connaissance touche aussi les questions sans marqueur temporel. « La dette de l'État » n'est pas une requête temporelle, mais sa bonne réponse change chaque mois ; en similarité pure, un dossier soigné vieux de six mois devance la dépêche d'hier qui porte le chiffre à jour. Les candidats presse qui passent le seuil de pertinence sont donc réordonnés avec la même formule de décote, mais en gardant la similarité dominante et une décroissance lente :
+
+```
+score = 0,85 × similarité + 0,15 × fraîcheur      (demi-vie : 45 jours)
+```
+
+Mesure sur 12 questions à sujet évolutif formulées sans mot-clé temporel (« dette de l'État », « prix du carburant », « salaire des fonctionnaires »…), en reproduisant le pipeline de recherche complet sur le corpus réel (18 299 articles, 17 juillet 2026) :
+
+| Métrique (top 5) | Similarité pure | Avec décote de fraîcheur |
+|---|---|---|
+| Âge médian du premier résultat | 141 jours | 19 jours |
+| Âge médian des articles récupérés | 155 jours | 23 jours |
+| Requêtes où l'article pertinent le plus récent atteint le top 5 | 3/12 | 12/12 |
+| Distance sémantique moyenne (coût en pertinence) | 1,082 | 1,120 (+3,5 %) |
+
+La couverture pertinente la plus fraîche atteint désormais le modèle sur chacune des questions testées, pour un coût en pertinence quasi nul ; un article ancien réellement pertinent continue de devancer un article frais à peine pertinent, la similarité pesant 85 % du score.
+
+Les valeurs par défaut ne sortent pas d'une intuition : le même script balaie la grille (poids, demi-vie) sur le même jeu de questions, en réordonnant un unique pool de candidats par question, de sorte que le balayage complet ne coûte qu'un appel d'embedding par question. Points représentatifs :
+
+| Poids fraîcheur | Demi-vie | Âge médian du 1er résultat | Plus récent dans le top 5 | Distance moyenne |
+|---|---|---|---|---|
+| 0 (comportement antérieur) | – | 141 j | 3/12 | 1,082 |
+| 0,05 | 45 j | 87 j | 5/12 | 1,086 |
+| 0,10 | 45 j | 27 j | 9/12 | 1,101 |
+| **0,15** | **45 j** | **19 j** | **12/12** | **1,120** |
+| 0,15 | 7 j | 72 j | 9/12 | 1,101 |
+| 0,25 | 45 j | 19 j | 12/12 | 1,147 |
+| 0,40 | 45 j | 12 j | 12/12 | 1,160 |
+
+0,15 / 45 jours est la configuration la moins coûteuse qui fait remonter l'article pertinent le plus récent sur chaque question. Des poids plus lourds achètent quelques jours de fraîcheur pour un coût en pertinence double à triple, et une demi-vie courte va à l'encontre du but recherché : à 7 jours, tout ce qui a plus de quelques semaines tombe à une fraîcheur quasi nulle, et le classement ne distingue plus un article de deux mois d'un article de six mois (le plus récent plafonne à 9/12 même à un poids de 0,40). Les trois paramètres restent réglables par variables d'environnement (`NONTEMPORAL_SIM_WEIGHT`, `NONTEMPORAL_REC_WEIGHT`, `NONTEMPORAL_HALF_LIFE_DAYS`), et le prompt de génération exige en outre que, lorsque les articles donnent des chiffres différents pour un même sujet à des dates différentes, le plus récent ouvre la réponse et les plus anciens soient présentés comme un historique. Banc d'essai et balayage sont reproductibles via `scripts/benchmark_recency.py`.
+
 ### 3.5 Recherche et génération
 
 **Deux endpoints découplés.** `/search` retourne les documents classés (titre, date, source, extrait, distance) ; `/answer` reçoit la question et les identifiants des documents retenus, recharge leur **texte intégral** côté serveur (jamais fourni par le client, qui ne pourrait envoyer que des extraits tronqués et serait manipulable), réassemble les chunks dans l'ordre en retirant les en-têtes synthétiques, et streame la synthèse. Chaque article est plafonné à 4 000 caractères de contexte ; la fenêtre du modèle est configurée à 16 384 tokens.
@@ -147,7 +177,21 @@ Enseignement principal : les modèles à raisonnement (famille Qwen3) génèrent
 
 ### 3.7 Exploration visuelle
 
-Un traitement hors ligne extrait les vecteurs de l'index, calcule quatre projections (PCA et UMAP, en 2D et 3D ; UMAP avec `n_neighbors=15`, `min_dist=0.1`), détecte les grappes par HDBSCAN dans l'espace UMAP 3D (taille minimale adaptative selon le corpus), puis fait nommer chaque grappe par le LLM à partir d'un échantillon de titres. Le tout est exporté en JSON statique consommé par le frontend (Plotly, clic sur un point = ouverture de l'article).
+Un traitement hors ligne extrait les vecteurs de l'index, calcule quatre projections (PCA et UMAP, en 2D et 3D ; UMAP avec `n_neighbors=15`, `min_dist=0.1`), détecte les grappes par HDBSCAN dans l'espace UMAP 3D (taille minimale adaptative selon le corpus), puis fait nommer chaque grappe par le LLM à partir d'un échantillon de titres. Le tout est exporté en JSON statique consommé par le frontend (Plotly).
+
+**De la carte décorative à la carte exploratoire.** Trois interactions distinguent une visualisation qu'on regarde d'une visualisation qu'on utilise : le clic ouvre l'article (`plotly_click`) ; le survol sélectionne un point pour le confirmer ensuite via un bouton dédié sur mobile (`plotly_hover`, car un tap y démarre souvent le geste de rotation 3D avant d'être reconnu comme un clic) ; et cliquer une entrée de légende isole sa catégorie sur la carte elle-même. Cette dernière interaction a révélé une leçon d'ingénierie non triviale. Premier essai : baisser l'opacité des catégories non sélectionnées via `Plotly.react()` — sans effet visible dans les zones denses, où des centaines de points semi-transparents superposés se recomposent optiquement vers une couleur quasi pleine (`1 − (1 − opacité)ⁿ → 1` quand n croît). Deuxième essai : masquer entièrement les autres traces (`visible: false`) via `Plotly.restyle()` — techniquement efficace mais mal conçu du point de vue produit, puisqu'il fait disparaître le contexte spatial du reste du corpus au lieu de simplement le mettre en retrait. Solution retenue : recolorer les catégories non sélectionnées en gris neutre plutôt que d'en réduire l'opacité — du gris superposé à du gris reste du gris, aucune recomposition optique possible, et le nuage reste peuplé. Un piège plus subtil est apparu à cette étape : `Plotly.react()` conserve les mêmes références d'objets que celles passées en entrée, si bien que chaque appel à `Plotly.restyle()` mute en place les objets React eux-mêmes ; en relisant une couleur « de base » depuis ces objets déjà mutés, un cycle sélection/désélection répété faisait perdre de façon permanente la couleur d'origine d'une catégorie. Correctif : ne jamais relire l'état visuel courant du graphique comme source de vérité, toujours recalculer la couleur et l'opacité de référence depuis les données React elles-mêmes.
+
+### 3.8 Rapports éditoriaux automatisés
+
+Les endpoints `/daily_report` et `/weekly_report` rédigent une synthèse à partir des seuls titres de la période, encadrée par des chiffres clés calculés du corpus (volumes, sources actives, jour le plus actif, rubriques dominantes). La fenêtre quotidienne est stricte : uniquement les articles du jour, avec repli sur la dernière journée couverte quand le jour est encore vide, et le prompt reçoit la période exacte couverte afin de dater les faits plutôt que de les présenter comme courants. Le texte est streamé vers l'interface puis mis en cache tant que la fenêtre et le volume d'articles n'évoluent pas.
+
+La version PDF réutilise la même synthèse et l'habille : couverture maquettée, nuage des mots des titres (fréquences accent-insensibles avec conservation de la graphie majoritaire, noms composés préservés, mots outils et mentions génériques exclus), graphiques lets-plot de style BBC encadrés d'un paragraphe d'introduction et d'une « Lecture » guidée, sélection de références choisies par recouvrement lexical entre titres et synthèse (dédoublonnée des reprises multi-sources), chacune liée à l'article original, et note méthodologique de clôture.
+
+### 3.9 Rattrapage de classification par LLM
+
+Le premier chantier de qualité des données identifié en section 6 des versions précédentes de ce document a été traité. Environ un quart des articles portaient une rubrique générique héritée du scraping (« À la une », « Actualités ») ou aucune rubrique du tout, à des taux très inégaux selon la source : 100 % pour Direct Infos Gabon et Gabon All Sport, 99 % pour 7 Jours Info, contre une poignée de pour cent pour les sources historiquement les mieux structurées. Le script `scripts/backfill_categories.py` traite ces entrées en deux passes : les sources mono-thématiques (Gabon All Sport, exclusivement sportif) sont reclassées par règle directe sans appel au modèle ; le reste est classé par lots de vingt titres soumis au LLM local, contraint à répondre dans la taxonomie éditoriale du projet (Politique, Économie, Société, Sport, Faits Divers / Justice, Culture, Provinces, Environnement, Santé, Éducation, Administration, Diplomatie, International, IA / Numérique, Communication, Autres). Chaque entrée conserve sa rubrique d'origine dans un champ `category_original` et un marqueur `category_source` (`llm` ou `source-rule`), rendant la passe auditable et réversible ; le script est également reprenable, les entrées déjà traitées étant ignorées en cas d'interruption.
+
+Résultat mesuré sur le corpus complet (18 480 articles au moment du traitement) : la part de rubriques génériques ou absentes passe de 24,0 % à 0,7 %, soit 4 429 articles reclassés (3 687 par le LLM, 621 par la règle de source, 121 restant sans réponse exploitable du modèle). La rubrique dominante parmi les articles reclassés est Économie, ce qui confirme que le défaut touchait principalement du contenu économique et institutionnel généraliste plutôt que du contenu réellement hors sujet.
 
 ---
 
@@ -166,41 +210,48 @@ Le Kiosque démontre qu'une infrastructure d'intelligence documentaire de presse
 
 ## 5. État des corpus
 
-**Presse** (10 202 articles uniques, 10 586 entrées indexées) :
+**Presse** (18 517 articles uniques, 19 228 entrées indexées au 20 juillet 2026) :
 
 | Source | Couverture | Articles |
 |---|---|---|
-| GabonMediaTime | déc. 2025 → aujourd'hui | ~3 090 |
-| GabonReview | déc. 2025 → aujourd'hui | ~2 540 |
-| L'Union | déc. 2025 → aujourd'hui | ~2 380 |
-| GabonActu | déc. 2025 → aujourd'hui | ~1 400 |
-| Dépêches 241 | déc. 2025 → aujourd'hui (rattrapé) | ~740 |
-| 7 Jours Info | juil. 2026 → aujourd'hui (rattrapage possible) | ~30 |
-| Éthique Média Gabon | juil. 2026 → aujourd'hui (rattrapage possible) | ~15 |
+| GabonMediaTime | déc. 2025 → aujourd'hui | 3 612 |
+| GabonReview | déc. 2025 → aujourd'hui | 2 970 |
+| L'Union | déc. 2025 → aujourd'hui | 2 664 |
+| Focus Groupe Média | déc. 2025 → aujourd'hui (rattrapé) | 1 728 |
+| GabonActu | déc. 2025 → aujourd'hui | 1 706 |
+| Direct Infos Gabon | déc. 2025 → aujourd'hui (rattrapé) | 1 327 |
+| 7 Jours Info | déc. 2025 → aujourd'hui (rattrapé) | 1 122 |
+| Inside News 241 | déc. 2025 → aujourd'hui (rattrapé) | 761 |
+| Dépêches 241 | sept. 2025 → aujourd'hui (rattrapé) | 748 |
+| Gabon All Sport | déc. 2025 → aujourd'hui (rattrapé) | 621 |
+| Kongossa News | déc. 2025 → aujourd'hui (rattrapé) | 510 |
+| Gabon Quotidien | déc. 2025 → aujourd'hui (rattrapé) | 434 |
+| Éthique Média Gabon | déc. 2025 → aujourd'hui (rattrapé) | 314 |
 
 **Codes juridiques** (1 502 articles de loi, granularité : l'article) : Code pénal, Code minier, Code des hydrocarbures, Code de l'enfant, Code de la nationalité. Référencés mais restant à intégrer : Code du travail, Code pénal modifié.
 
-Le pipeline complet (7 scrapers parallèles → Sheets → indexation incrémentale → export des projections) s'exécute quotidiennement en une commande et notifie son avancement.
+Le pipeline complet (13 scrapers parallèles → Sheets → indexation incrémentale → export des projections) s'exécute quotidiennement en une commande et notifie son avancement ; il est planifié trois fois par jour (10 h, 15 h, 20 h) via cron.
 
 ---
 
 ## 6. Limites connues
 
-- **Pas d'évaluation formalisée.** La qualité est validée empiriquement sur des questions de test ; un banc d'évaluation (questions datées annotées, métriques de précision temporelle et de fidélité) reste à construire.
+- **Évaluation partielle.** La fraîcheur de la récupération est désormais mesurée par un banc reproductible (§ 3.4 d), mais la fidélité des synthèses au contenu des articles reste validée empiriquement ; un banc d'évaluation complet (questions datées annotées, métriques de fidélité) reste à construire.
 - **Recherche purement vectorielle.** Les noms propres rares et sigles exacts bénéficieraient d'une recherche hybride (BM25 + vecteurs).
 - **Heuristique de suivi conservatrice.** Un suivi formulé comme une question autonome peut échapper à l'enrichissement contextuel à la récupération ; le modèle de génération, qui voit l'historique, compense en général.
-- **Décote temporelle limitée au mode temporel.** Les questions sans marqueur de temps (« où en est le chantier X ? ») suivent le chemin purement sémantique et peuvent remonter du contenu ancien ; une décote légère généralisée est à l'étude.
-- **Mono-machine, usage privé.** Déploiement public conditionné à : limitation de débit, CORS restreint, compression de l'export JSON (10,6 Mo), hébergement dimensionné pour le modèle choisi.
+- **Partage public encore artisanal.** Une limitation de débit par client protège désormais les points de terminaison coûteux (`/answer`, `/search`, les rapports), et un tunnel Cloudflare permet un partage public temporaire du build de production ; mais l'URL n'est pas stable (elle change à chaque relance du tunnel), aucun contrôle d'accès n'existe au-delà du débit, et la capacité reste celle d'une seule machine : Ollama sérialise les générations, donc plusieurs utilisateurs simultanés font la queue plutôt que de répondre en parallèle. Un tunnel nommé avec Cloudflare Access (authentification par e-mail, jusqu'à 50 utilisateurs gratuitement) est le prochain palier pour un partage soutenu.
+- **Corpus juridique partiel.** Cinq codes sur sept référencés sont intégrés (§ 5) ; le Code du travail et le Code pénal modifié restent à indexer.
 
 ---
 
 ## 7. Feuille de route
 
 - **Recherche hybride** BM25 + vecteurs pour les entités nommées.
-- **Corpus** : rattrapage historique des nouvelles sources (l'API REST WordPress le rend trivial), intégration du Code du travail, exploration systématique du Journal Officiel.
+- **Corpus** : intégration du Code du travail et du Code pénal modifié, exploration systématique du Journal Officiel (le rattrapage historique des sources WordPress est fait, la classification de rattrapage par LLM est faite — § 3.9).
 - **Croisement presse ↔ droit** : « que dit la loi sur ce dont parle cet article ? », la fonctionnalité différenciante que la double indexation rend possible.
 - **Évaluation** : jeu de test de questions datées, mesure de la précision temporelle et de la fidélité des synthèses.
-- **Déploiement** : exposition maîtrisée (tunnel sécurisé depuis la machine locale, puis serveur dédié), avec les prérequis de la section 6.
+- **Déploiement soutenu** : tunnel Cloudflare nommé avec URL stable et Cloudflare Access pour le contrôle d'accès, au-delà du tunnel temporaire et de la limitation de débit déjà en place (§ 6).
+- **Signal de qualité** : mécanisme de retour utilisateur (pouce haut/bas) sur les réponses générées, pour disposer d'une mesure de satisfaction en production au-delà des tests manuels.
 
 ---
 

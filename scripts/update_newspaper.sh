@@ -28,6 +28,8 @@ if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
 fi
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="$DIR/.venv/bin/python"
+# Stream python output live into the log files (no block buffering)
+export PYTHONUNBUFFERED=1
 
 echo "============================================"
 echo "  Newspaper Pipeline — last $DAYS days"
