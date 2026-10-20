@@ -774,6 +774,62 @@ def widget_summary():
     }
 
 
+_HEADER_RE = re.compile(r"^(Titre|Catégorie|Date|Source)\s*:")
+
+
+def _lede(doc: str, n: int = 260) -> str:
+    """Opening of an article body: skips the indexing header and a short byline, cuts at a word."""
+    paras = [p.strip() for p in doc.split("\n") if p.strip()]
+    body = [p for p in paras if not _HEADER_RE.match(p)]
+    if body and len(body[0]) < 70 and re.match(r"^(Par|By)\s", body[0]):
+        body = body[1:]
+    text = " ".join(body)
+    if len(text) <= n:
+        return text
+    cut = text[:n].rsplit(" ", 1)[0].rstrip(",;:")
+    return cut + "…"
+
+
+@app.get("/today")
+def today(per_theme: int = 6):
+    """Front page of the web app: the latest covered day's articles, newest first, grouped by
+    theme, each with a short lede. Same day window as the daily report (_collect_report)."""
+    from collections import Counter
+
+    start, _now, rows = _collect_report(daily=True)
+    urls = [r[4] for r in rows if r[4]]
+    items = []
+    if urls:
+        res = _collection.get(where={"source_url": {"$in": urls}}, include=["documents", "metadatas"])
+        seen = set()
+        for doc, m in zip(res["documents"], res["metadatas"]):
+            if not m or m.get("chunk", 0) or m["source_url"] in seen:
+                continue
+            seen.add(m["source_url"])
+            items.append({
+                "title": m.get("title", ""),
+                "source": m.get("source", ""),
+                "theme": normalize_category(m.get("category"), m.get("source", "")),
+                "url": m["source_url"],
+                "time": str(m.get("published_time", "")),
+                "lede": _lede(doc or ""),
+            })
+    items.sort(key=lambda a: a["time"], reverse=True)
+    counts = Counter(a["theme"] for a in items)
+    generic = {"Non classé", "Autres"}
+    order = [t for t, _ in counts.most_common() if t not in generic] + [t for t in counts if t in generic]
+    return {
+        "date": start.date().isoformat(),
+        "gabon_today": gabon_today().isoformat(),
+        "count": len(items),
+        "sources": len({a["source"] for a in items}),
+        "latest": items[:12],
+        # The lead theme gets twice the room: it fills the front page's main column
+        "themes": [{"name": t, "count": counts[t], "articles": [a for a in items if a["theme"] == t][:per_theme * (2 if i == 0 else 1)]}
+                   for i, t in enumerate(order)],
+    }
+
+
 def _code_title(meta: dict) -> str:
     label = CODE_LABELS.get(meta.get("code", ""), meta.get("code", ""))
     numero = meta.get("numero") or meta.get("type", "")
