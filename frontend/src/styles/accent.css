@@ -1,0 +1,31 @@
+/* Terracotta accent: one warm signal colour on top of navy and green, used sparingly
+   (title word, rules, sources, badges, chart highlights). Green stays for actions. */
+:root {
+  --pop: #C4562B;
+  --pop-ink: #A3431E;
+  --pop-soft: #F7E3D9;
+  --pop-on-deep: #EE9670;
+  --tint: #F7F1EC;
+  --hero: #FBF2EC;
+}
+
+/* where the accent shows */
+.k-hero-band { background: var(--hero); }
+.k-eyebrow::before { background: var(--pop); height: 2px; }
+.k-nav a { background-image: linear-gradient(var(--pop), var(--pop)); background-size: 0 2px; }
+.k-nav a:hover, .k-nav a[aria-current="page"] { background-size: 100% 2px; }
+.k-tabbar a[aria-current="page"] svg { color: var(--pop-ink); }
+.k-display em, .k-title em { color: var(--pop-ink); }
+.k-badge { background: var(--pop); color: #fff; }
+.k-chip b { color: var(--pop-ink); }
+.k-src { color: var(--pop-ink); }
+.k-wire time { color: var(--pop-ink); }
+.k-band { background: var(--tint); }
+.k-briefing .k-eyebrow, .k-move-card.lead .k-move-sources { color: var(--pop-on-deep); }
+.k-briefing-cta, .k-move-card.lead .k-textlink { color: var(--pop-on-deep); }
+.k-move-badge { color: var(--pop-ink); background: var(--pop-soft); }
+.k-move-card.lead .k-move-badge { color: var(--deep); background: var(--pop-on-deep); }
+.k-move-card { border-top: 3px solid var(--pop); }
+.k-spark rect.now, .k-move-dots i.on { fill: var(--pop); background: var(--pop); }
+.k-src-n { background: var(--pop-soft); color: var(--pop-ink); }
+.k-tendances .stat-highlight .stat-label { color: var(--pop-on-deep); }
