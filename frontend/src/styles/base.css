@@ -96,6 +96,8 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-btn:disabled { opacity: 0.45; }
 .k-btn.primary { background: var(--green); border-color: var(--green); color: var(--on-green); }
 .k-btn.primary:hover:not(:disabled) { background: var(--green-hover); border-color: var(--green-hover); }
+/* the main action keeps its full green even before a question is typed */
+.k-btn.primary:disabled { opacity: 1; }
 .k-btn.ghost { border-color: transparent; color: var(--ink-soft); min-height: 38px; padding: 0.55rem 0.75rem; }
 .k-btn.ghost:hover:not(:disabled) { color: var(--green); background: var(--green-soft); }
 .k-textlink, .k-link { display: inline-flex; align-items: center; gap: 0.5rem; font: 500 0.9rem/1.4 var(--sans); color: var(--ink); text-decoration: none; padding-bottom: 2px; background: linear-gradient(var(--ink), var(--ink)) 0 100% / 100% 1px no-repeat; }
