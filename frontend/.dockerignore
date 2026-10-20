@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-ssr/
+
+.git/
+.DS_Store
+.vscode/
+.idea/
+
+# Build-time env comes from the VITE_API_URL build arg, not the host's file
+.env.local
+*.local
+
+*.log
+logs/
+
+Dockerfile
+.dockerignore
+
+# The ~20 MB embedding export is bind-mounted at runtime, not baked into the
+# bundle — see docker-compose.yml
+public/data.json

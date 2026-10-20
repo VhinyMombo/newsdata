@@ -236,10 +236,17 @@ _CLOUD_STOP = {
     "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
 }
 
+# macOS first, then the Linux equivalents shipped in the container image
+# (fonts-liberation, fonts-dejavu-core). Without a match WordCloud falls back
+# to its bundled DroidSansMono, which has no French accents.
 _CLOUD_FONTS = (
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
 
 # BAND/ACCENT greens first (they dominate), then validated categorical hues

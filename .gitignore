@@ -1,5 +1,6 @@
 # Environments
 .env
+.env.docker
 .venv
 env/
 venv/
@@ -45,6 +46,8 @@ newspaper_chroma_db/
 *.sqlite3
 *.db3
 *.db-journal
+*.db-shm
+*.db-wal
 
 # Logs
 logs/

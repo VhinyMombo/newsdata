@@ -27,7 +27,8 @@ if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PYTHON="$DIR/.venv/bin/python"
+# The container image has no .venv — it sets PYTHON=/opt/venv/bin/python.
+PYTHON="${PYTHON:-$DIR/.venv/bin/python}"
 # Stream python output live into the log files (no block buffering)
 export PYTHONUNBUFFERED=1
 

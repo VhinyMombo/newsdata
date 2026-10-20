@@ -21,7 +21,8 @@ from zoneinfo import ZoneInfo
 
 import chromadb
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -31,6 +32,10 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_ollama.chat_models import ChatOllama
 from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import BaseModel, Field
+
+import auth
+
+load_dotenv()
 
 ROOT_DIR = Path(__file__).parent
 PERSIST_DIR = ROOT_DIR / "newspaper_chroma_db"
@@ -62,6 +67,8 @@ NONTEMPORAL_HALF_LIFE_DAYS  = float(os.getenv("NONTEMPORAL_HALF_LIFE_DAYS",  "45
 ANSWER_EXCERPT_CHARS = int(os.getenv("ANSWER_EXCERPT_CHARS", "4000"))
 # Ollama context window for the chat model (must fit system + 5 articles + question)
 CHAT_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "16384"))
+# Web push (see push_notify.py) — keys generated once via py-vapid, stored in .env
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
 
 # Gabon has a single fixed offset year-round (WAT, UTC+1, no DST). All "what
 # day is it" logic below (temporal RAG windows, daily report boundaries,
@@ -103,6 +110,10 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    # Custom response headers aren't exposed to browser JS by default even
+    # with allow_headers="*" (that governs the request side); the frontend
+    # reads X-Report-Source to tell a cache hit from a fresh generation
+    expose_headers=["X-Report-Source", "X-Answer-Source"],
 )
 
 
@@ -159,7 +170,33 @@ CODE_LABELS = {
     "codes_hydrocarbures":  "Code des hydrocarbures",
     "codes_nationalites":   "Code de la nationalité",
     "code_travail":         "Code du travail",
+    "loi_de_finances_2026": "Loi de Finances 2026",
 }
+
+# Browse index for the Codes de loi side panel: entries grouped by code,
+# ordered by their original row in the source CSV (which already follows
+# the code's own Titre/Chapitre/Article structure). Built once at startup —
+# the whole corpus is ~1,500 short metadata rows, trivial to hold in memory,
+# and this avoids re-scanning Chroma on every browse request.
+_CODES_INDEX: dict[str, list[dict]] = {}
+if _codes_collection is not None:
+    try:
+        _all = _codes_collection.get(include=["metadatas"])
+        _by_code: dict[str, list[tuple[int, dict]]] = {}
+        for id_, meta in zip(_all["ids"], _all["metadatas"]):
+            code = meta.get("code", "")
+            _by_code.setdefault(code, []).append((meta.get("row") or 0, {
+                "id": id_,
+                "numero": meta.get("numero", ""),
+                "type": meta.get("type", ""),
+                "contexte": meta.get("contexte", ""),
+            }))
+        _CODES_INDEX = {
+            code: [item for _, item in sorted(entries, key=lambda t: t[0])]
+            for code, entries in _by_code.items()
+        }
+    except Exception as e:
+        logger.warning(f"Codes browse index build failed: {e}")
 
 
 # ── RAG helpers ───────────────────────────────────────────────────────────────
@@ -406,6 +443,11 @@ class SearchRequest(BaseModel):
     # Previous user question, used to disambiguate follow-ups at retrieval time
     previous_question: str = Field(default="", max_length=500)
     corpus: str = Field(default="presse", pattern="^(presse|codes)$")
+    # Comparison mode ("vs" period picker): explicit ISO dates override the
+    # question-text temporal parsing below. Both or neither — a lone date
+    # is ambiguous (open-ended window? single day?) so it's rejected.
+    period_start: str | None = Field(default=None)
+    period_end: str | None = Field(default=None)
 
 
 class ArticleResult(BaseModel):
@@ -538,6 +580,134 @@ def _ollama_reachable() -> bool:
         return False
 
 
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+    display_name: str = Field(min_length=1, max_length=80)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class UpdateProfileRequest(BaseModel):
+    display_name: str | None = Field(default=None, max_length=80)
+    current_password: str | None = Field(default=None, max_length=200)
+    new_password: str | None = Field(default=None, min_length=8, max_length=200)
+
+
+class FollowRequest(BaseModel):
+    type: str = Field(pattern="^(keyword|source|theme)$")
+    value: str = Field(min_length=1, max_length=200)
+    label: str = Field(min_length=1, max_length=200)
+
+
+class PushKeys(BaseModel):
+    p256dh: str = Field(min_length=1, max_length=500)
+    auth: str = Field(min_length=1, max_length=500)
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2000)
+    keys: PushKeys
+
+
+def _bearer_token(authorization: str | None = Header(default=None)) -> str | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    return authorization.removeprefix("Bearer ").strip()
+
+
+def require_user(token: str | None = Depends(_bearer_token)) -> dict:
+    user = auth.get_user_by_token(token) if token else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentification requise.")
+    return user
+
+
+@app.post("/auth/register")
+@limiter.limit("5/minute")
+def register(request: Request, req: RegisterRequest):
+    try:
+        user, token = auth.create_user(req.email, req.password, req.display_name)
+    except auth.AuthError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"user": user, "token": token}
+
+
+@app.post("/auth/login")
+@limiter.limit("10/minute")
+def login(request: Request, req: LoginRequest):
+    try:
+        user, token = auth.authenticate(req.email, req.password)
+    except auth.AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    return {"user": user, "token": token}
+
+
+@app.post("/auth/logout")
+def logout(token: str | None = Depends(_bearer_token)):
+    if token:
+        auth.delete_session(token)
+    return {"status": "ok"}
+
+
+@app.get("/auth/me")
+def me(user: dict = Depends(require_user)):
+    return user
+
+
+@app.patch("/auth/me")
+def update_me(req: UpdateProfileRequest, user: dict = Depends(require_user)):
+    try:
+        updated = auth.update_profile(
+            user["id"],
+            display_name=req.display_name,
+            current_password=req.current_password,
+            new_password=req.new_password,
+        )
+    except auth.AuthError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return updated
+
+
+@app.get("/follows")
+def get_follows(user: dict = Depends(require_user)):
+    return auth.list_follows(user["id"])
+
+
+@app.post("/follows")
+def post_follow(req: FollowRequest, user: dict = Depends(require_user)):
+    auth.add_follow(user["id"], req.type, req.value, req.label)
+    return auth.list_follows(user["id"])
+
+
+@app.delete("/follows")
+def delete_follow(type: str, value: str, user: dict = Depends(require_user)):
+    auth.remove_follow(user["id"], type, value)
+    return auth.list_follows(user["id"])
+
+
+@app.get("/push/vapid_public_key")
+def push_vapid_public_key():
+    return {"key": VAPID_PUBLIC_KEY}
+
+
+@app.post("/push/subscribe")
+def push_subscribe(req: PushSubscribeRequest, user: dict = Depends(require_user)):
+    auth.add_push_subscription(user["id"], req.endpoint, req.keys.p256dh, req.keys.auth)
+    return {"status": "ok"}
+
+
+@app.delete("/push/subscribe")
+def push_unsubscribe(endpoint: str, user: dict = Depends(require_user)):
+    auth.remove_push_subscription(user["id"], endpoint)
+    return {"status": "ok"}
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -548,6 +718,59 @@ def health():
         "llm": CHAT_MODEL,
         "ollama": _ollama_reachable(),
         "last_article_date": _latest_article_date(),
+        # Authoritative "today" for the frontend: a visitor's device clock
+        # (timezone, DST, plain misconfiguration) is not a reliable source
+        # for "is our data from today", so the dashboard compares against
+        # this instead of new Date() — same anchoring principle as the rest
+        # of the Gabon-anchored time handling in this file.
+        "gabon_today": gabon_today().isoformat(),
+    }
+
+
+@app.get("/widget/summary")
+def widget_summary():
+    """Single-call data source for the iOS widget (ios/LeKiosqueWidget) — one
+    request instead of the widget hitting multiple endpoints, since extension
+    processes run under a tight memory/time budget. Reuses the same "today"
+    window as the daily report (_collect_report) rather than recomputing it."""
+    from collections import Counter
+
+    _start, _now, rows = _collect_report(daily=True)
+
+    # Yesterday's count, for a "today vs yesterday" comparison — deliberately
+    # a 1-day window, not a weekly/corpus-wide average, so the large widget's
+    # extra stat stays as fresh/recent as everything else on it.
+    anchor_date = _start.date()
+    yesterday_date = anchor_date - timedelta(days=1)
+    _, _, two_day_rows = _collect_week(start=datetime.combine(yesterday_date, datetime.min.time()))
+    yesterday_count = sum(1 for r in two_day_rows if r[0] == yesterday_date.isoformat())
+    vs_yesterday_pct = (
+        round((len(rows) - yesterday_count) / yesterday_count * 100) if yesterday_count > 0 else None
+    )
+
+    by_source = Counter(r[1] for r in rows if r[1])
+    top_source = by_source.most_common(1)
+    # "Non classé"/"Autres" are normalize_category's generic fallback buckets,
+    # not real themes (same reasoning CustomTreemap in App.jsx uses to exclude
+    # "Autres" from being followable) — surfacing one as "today's top theme"
+    # would be meaningless, so they're excluded from the running here.
+    GENERIC_THEME_BUCKETS = {"Non classé", "Autres"}
+    by_theme = Counter(
+        t for r in rows
+        if (t := normalize_category(r[2], r[1])) not in GENERIC_THEME_BUCKETS
+    )
+    top_themes = by_theme.most_common(4)
+    return {
+        "articles": _article_count(),
+        "last_article_date": _latest_article_date(),
+        "gabon_today": gabon_today().isoformat(),
+        "today_count": len(rows),
+        "yesterday_count": yesterday_count,
+        "vs_yesterday_pct": vs_yesterday_pct,
+        "top_source": {"name": top_source[0][0], "count": top_source[0][1]} if top_source else None,
+        # Top 4 (not just 1) so the widget can chart the spread, not just name
+        # a winner.
+        "themes": [{"name": n, "count": c} for n, c in top_themes],
     }
 
 
@@ -618,6 +841,70 @@ def _fetch_code_extracts(ids: list[str]) -> list[ContextArticle]:
     return extracts
 
 
+@app.get("/codes/browse")
+def codes_browse():
+    """List available legal codes with their article counts, for the Codes
+    de loi side panel's top-level navigation."""
+    if _codes_collection is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Le corpus des codes juridiques n'est pas disponible.",
+        )
+    return {
+        "codes": [
+            {"code": code, "label": CODE_LABELS.get(code, code), "count": len(entries)}
+            for code, entries in _CODES_INDEX.items()
+        ]
+    }
+
+
+@app.get("/codes/browse/{code}")
+def codes_browse_one(code: str):
+    """Flat, source-ordered list of entries (numero/type/contexte) for one
+    code — the frontend groups these into a Titre/Chapitre tree client-side."""
+    entries = _CODES_INDEX.get(code)
+    if entries is None:
+        raise HTTPException(status_code=404, detail="Code juridique introuvable.")
+    return {"code": code, "label": CODE_LABELS.get(code, code), "entries": entries}
+
+
+@app.get("/codes/article/{article_id}")
+def codes_article(article_id: str):
+    """Full text of a single article/preambule entry, for the reading pane —
+    a plain lookup, no LLM involved."""
+    if _codes_collection is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Le corpus des codes juridiques n'est pas disponible.",
+        )
+    res = _codes_collection.get(ids=[article_id], include=["documents", "metadatas"])
+    if not res["ids"]:
+        raise HTTPException(status_code=404, detail="Article introuvable.")
+    meta = res["metadatas"][0]
+    code = meta.get("code", "")
+    numero = meta.get("numero", "")
+    contexte = meta.get("contexte", "")
+
+    # The stored document is "title\n\ncontexte\n\ntexte" (create_codes_db.py's
+    # assembly for embedding) — strip the parts the panel already shows as
+    # separate fields (numero/contexte), leaving just the article body.
+    body = res["documents"][0]
+    title_parts = [p for p in [code, meta.get("type", ""), numero] if p]
+    for line in filter(None, [" - ".join(title_parts) if title_parts else "", contexte]):
+        if body.startswith(line):
+            body = body[len(line):].lstrip("\n")
+
+    return {
+        "id": article_id,
+        "numero": numero,
+        "contexte": contexte,
+        "code": code,
+        "label": CODE_LABELS.get(code, code),
+        "url": meta.get("source_url", ""),
+        "text": body,
+    }
+
+
 @app.post("/search", response_model=SearchResponse)
 @limiter.limit("30/minute")
 def search(request: Request, req: SearchRequest):
@@ -625,8 +912,27 @@ def search(request: Request, req: SearchRequest):
     if not question:
         raise HTTPException(status_code=422, detail="La question est vide.")
 
-    # 1. Extract the time window the question refers to (None = not temporal)
-    window = parse_time_window(question)
+    # 1. Extract the time window the question refers to (None = not temporal).
+    #    An explicit period (comparison mode) overrides text-based parsing.
+    if bool(req.period_start) != bool(req.period_end):
+        raise HTTPException(
+            status_code=422,
+            detail="period_start et period_end doivent être fournis ensemble.",
+        )
+    if req.period_start and req.period_end:
+        try:
+            start_dt = datetime.fromisoformat(req.period_start)
+            end_dt = datetime.fromisoformat(req.period_end)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="period_start/period_end doivent être des dates ISO valides (AAAA-MM-JJ).",
+            )
+        # Inclusive end-of-day, matching how a "period" reads to a user
+        end_dt = end_dt.replace(hour=23, minute=59, second=59)
+        window = (gabon_timestamp(start_dt), gabon_timestamp(end_dt))
+    else:
+        window = parse_time_window(question)
 
     # 2. Embed question — follow-ups ("et à Port-Gentil ?") carry too little
     #    meaning alone, so they are embedded together with the previous question
@@ -720,9 +1026,54 @@ def search(request: Request, req: SearchRequest):
     return SearchResponse(question=question, results=articles)
 
 
+# Answer cache: repeated/duplicate questions (a second visitor asking the
+# same thing, a refresh, a retry) shouldn't pay the full 1-3 minute local-LLM
+# tax again. Keyed on the exact retrieved source set, not just the question
+# text — if the corpus has moved on since the last identical question, the
+# search step upstream would return different urls/ids and naturally miss
+# this cache, so a stale answer never gets served as if it were current.
+# Skipped for follow-ups (history present): the same question can have a
+# different correct answer depending on what preceded it.
+ANSWER_CACHE_TTL_S = 30 * 60
+ANSWER_CACHE_MAX = 200
+_answer_cache: dict[str, tuple[str, float]] = {}
+
+
+def _answer_cache_key(corpus: str, question: str, urls: list[str], ids: list[str]) -> str:
+    idents = sorted(ids if corpus == "codes" else urls)
+    return f"{corpus}|{question.strip().lower()}|{'|'.join(idents)}"
+
+
+def _answer_cache_get(key: str) -> str | None:
+    hit = _answer_cache.get(key)
+    if not hit:
+        return None
+    text, expires_at = hit
+    if time.time() > expires_at:
+        del _answer_cache[key]
+        return None
+    return text
+
+
+def _answer_cache_put(key: str, text: str) -> None:
+    if len(_answer_cache) >= ANSWER_CACHE_MAX:
+        oldest_key = next(iter(_answer_cache))
+        del _answer_cache[oldest_key]
+    _answer_cache[key] = (text, time.time() + ANSWER_CACHE_TTL_S)
+
+
 @app.post("/answer")
 @limiter.limit("6/minute")
 def answer(request: Request, req: AnswerRequest):
+    cache_key = None
+    if not req.history:
+        cache_key = _answer_cache_key(req.corpus, req.question, req.urls, req.ids)
+        cached = _answer_cache_get(cache_key)
+        if cached is not None:
+            return StreamingResponse(
+                iter([cached]), media_type="text/plain",
+                headers={"X-Answer-Source": "cache"},
+            )
     try:
         if req.corpus == "codes":
             context_items = _fetch_code_extracts(req.ids)
@@ -758,8 +1109,10 @@ def answer(request: Request, req: AnswerRequest):
     messages.append(HumanMessage(content=user_prompt))
 
     def generate():
+        chunks: list[str] = []
         try:
             for chunk in _llm.stream(messages):
+                chunks.append(chunk.content)
                 yield chunk.content
         except Exception as e:
             logger.error(f"LLM streaming error: {e}")
@@ -767,8 +1120,14 @@ def answer(request: Request, req: AnswerRequest):
                 "\n\n[Erreur : la génération a été interrompue. "
                 "Vérifiez qu'Ollama est démarré puis réessayez.]"
             )
+            return
+        # Same truncation guard as the report cache: an unfinished answer
+        # (aborted stream, context limit) must not get served back as if complete
+        text = "".join(chunks)
+        if cache_key and text and text[-1] in ".!?»)":
+            _answer_cache_put(cache_key, text)
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(generate(), media_type="text/plain", headers={"X-Answer-Source": "fresh"})
 
 
 _report_cache: dict = {
@@ -810,6 +1169,41 @@ synthétisant les faits marquants, avec les dates.
 - Français journalistique dense. Vise 500 à 650 mots au total : couvre les \
 faits les plus importants de la semaine sans délayer.
 """
+
+
+# Canonical Python copy of frontend/src/App.jsx's normalizeCategory
+# (App.jsx:2366-2397) — the JS version can't share this definition, so if the
+# frontend's theme taxonomy changes, mirror it here too. Used by
+# /widget/summary below and by push_notify.py (imported via `api.` rather
+# than duplicated a second time).
+MONO_THEME_SOURCES = {"gabonallsport": "Sport"}
+
+
+def normalize_category(cat: "str | None", source: str) -> str:
+    fallback = MONO_THEME_SOURCES.get(source)
+    if not cat:
+        return fallback or "Autres"
+    c = re.sub(r"['\"«»]", "", cat.lower().strip())
+    if "politique" in c: return "Politique"
+    if "economie" in c or "économie" in c: return "Économie"
+    if "societe" in c or "société" in c or "social" in c: return "Société"
+    if "sport" in c or "foot" in c: return "Sport"
+    if "justice" in c or "fait divers" in c or "faits_divers" in c or "faits divers" in c:
+        return "Faits Divers / Justice"
+    if "provinces" in c: return "Provinces"
+    if "culture" in c or "musique" in c or "cinéma" in c: return "Culture"
+    if "enviro" in c: return "Environnement"
+    if "santé" in c or "sante" in c: return "Santé"
+    if "admin" in c or "instit" in c: return "Administration"
+    if "diplomatie" in c: return "Diplomatie"
+    if "international" in c: return "International"
+    if "education" in c or "formation" in c: return "Éducation"
+    if "communication" in c or "médias" in c: return "Communication"
+    if "ia" in c or "numérique" in c: return "IA / Numérique"
+    if (re.match(r"^(a|à) la une", c) or c.startswith("actualit") or c in ("news", "infos")
+            or "non class" in c or "uncategorized" in c):
+        return fallback or "Non classé"
+    return cat[:1].upper() + cat[1:]
 
 
 def _collect_week(days: int = 7, start: "datetime | None" = None):
@@ -896,12 +1290,26 @@ def _weekly_messages(start, now, rows, *, daily: bool = False):
     return messages, by_source, by_category, by_day
 
 
-def _maybe_cache_report(cache_key, text: str, kind: str = "weekly") -> None:
+def _maybe_cache_report(cache_key, text: str, kind: str = "weekly",
+                        period_start: "date | None" = None,
+                        period_end: "date | None" = None,
+                        article_count: int = 0) -> None:
     # Only cache output that ends like a finished sentence — a stream cut
     # by the context limit would otherwise be served forever
     if text and text[-1] in ".!?»)":
         _report_cache[kind]["key"] = cache_key
         _report_cache[kind]["text"] = text
+        if period_start and period_end:
+            try:
+                import report_archive
+                report_archive.save_report(
+                    kind, period_start.isoformat(), period_end.isoformat(),
+                    article_count, text,
+                )
+            except Exception as e:
+                # Archiving is a nice-to-have on top of a completed report —
+                # never let it turn a successful generation into a 500
+                logger.warning(f"/{kind}_report: archive save failed: {e}")
     else:
         logger.warning(f"/{kind}_report: output looks truncated, not cached")
 
@@ -943,8 +1351,17 @@ def _stream_report(kind: str):
         return StreamingResponse(iter([empty_msg]), media_type="text/plain")
 
     cache_key = (start.date().isoformat(), len(rows))
+    # Told to the frontend via a header rather than inferred from timing: a
+    # cache hit still has this window's articles available server-side, so
+    # /daily_report/pdf can rebuild a matching PDF from it — unlike a report
+    # reloaded from the archive (text only, no article list), where the PDF
+    # link is correctly hidden. Two different guarantees; the UI should say
+    # which one it's showing rather than making both look identical.
     if _report_cache[kind]["key"] == cache_key:
-        return StreamingResponse(iter([_report_cache[kind]["text"]]), media_type="text/plain")
+        return StreamingResponse(
+            iter([_report_cache[kind]["text"]]), media_type="text/plain",
+            headers={"X-Report-Source": "cache"},
+        )
 
     messages, *_ = _weekly_messages(start, now, rows, daily=daily)
 
@@ -954,12 +1371,15 @@ def _stream_report(kind: str):
             for chunk in _report_llm.stream(messages):
                 chunks.append(chunk.content)
                 yield chunk.content
-            _maybe_cache_report(cache_key, "".join(chunks).strip(), kind=kind)
+            _maybe_cache_report(cache_key, "".join(chunks).strip(), kind=kind,
+                                period_start=start.date(), period_end=now.date(),
+                                article_count=len(rows))
         except Exception as e:
             logger.error(f"/{kind}_report LLM error: {e}")
             yield "\n\n[Erreur : la génération a été interrompue. Réessayez.]"
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(generate(), media_type="text/plain",
+                             headers={"X-Report-Source": "fresh"})
 
 
 @app.get("/weekly_report")
@@ -1000,7 +1420,9 @@ def _report_pdf(kind: str):
         except Exception as e:
             logger.error(f"/{kind}_report/pdf LLM error: {e}")
             raise HTTPException(status_code=503, detail="La génération du rapport a échoué.")
-        _maybe_cache_report(cache_key, text, kind=kind)
+        _maybe_cache_report(cache_key, text, kind=kind,
+                           period_start=start.date(), period_end=now.date(),
+                           article_count=len(rows))
 
     try:
         from report_pdf import build_weekly_pdf
@@ -1032,6 +1454,24 @@ def weekly_report_pdf(request: Request):
 def daily_report_pdf(request: Request):
     """Downloadable PDF: daily summary text + charts."""
     return _report_pdf("daily")
+
+
+@app.get("/reports/archive")
+def reports_archive(kind: str | None = None, limit: int = 30):
+    """Past generated reports, newest first (excerpt only — see /reports/archive/{id})."""
+    if kind not in (None, "daily", "weekly"):
+        raise HTTPException(status_code=422, detail="kind doit être 'daily' ou 'weekly'.")
+    import report_archive
+    return report_archive.list_reports(kind=kind, limit=min(max(limit, 1), 100))
+
+
+@app.get("/reports/archive/{report_id}")
+def reports_archive_one(report_id: int):
+    import report_archive
+    row = report_archive.get_report(report_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Rapport introuvable.")
+    return row
 
 
 if __name__ == "__main__":

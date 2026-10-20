@@ -1,0 +1,57 @@
+# Build context trimming — keep the image small and the build cache stable.
+
+# VCS / editor
+.git/
+.gitignore
+.DS_Store
+.vscode/
+.idea/
+
+# Local Python env (never ship the host venv into a Linux image)
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Agent / tooling artifacts
+.agents/
+.claude/
+.memory/
+graphify-out/
+MEMORY.md
+
+# Secrets — mounted at runtime, never baked in
+.env
+.env.*
+credentials.json
+
+# Vector stores and corpora — bind-mounted as volumes (485 MB + 18 MB)
+newspaper_chroma_db/
+codes_chroma_db/
+chroma_db/
+data/
+JOdata/
+Newspaperdata/
+
+# Runtime state — lives on a named volume
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# Logs
+logs/
+*.log
+nohup.out
+
+# Frontend has its own image and its own .dockerignore
+frontend/
+ios/
+
+# Docs / one-off scripts
+docs/
+logo/
+test_*.py
+testt.py
