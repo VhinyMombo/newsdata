@@ -48,3 +48,6 @@
 .k-modes button.on { border-color: var(--action); background: var(--action-soft); box-shadow: inset 0 0 0 1px var(--action); }
 .k-modes button.on svg { color: var(--action); }
 .k-briefing .k-eyebrow::before, .k-move-card.lead .k-eyebrow::before { background: var(--pop-on-deep); }
+
+/* Rounder shapes: cards and fields 10px, the button inside the ask box a step smaller so the corners nest */
+.k-askbox .k-btn, .k-composer .k-send { border-radius: 7px; }

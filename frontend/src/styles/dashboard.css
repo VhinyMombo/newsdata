@@ -3018,7 +3018,7 @@ button, input, select, textarea { font-family: inherit; }
 .k-tendances .chart-container,
 .k-tendances .today-comparison,
 .k-tendances .follow-card,
-.k-tendances .freshness-card { border-radius: 3px; border: 1px solid var(--rule); box-shadow: none; background: var(--white); }
+.k-tendances .freshness-card { border-radius: 10px; border: 1px solid var(--rule); box-shadow: none; background: var(--white); }
 .k-tendances .stat-card { padding: 20px 22px; display: flex; flex-direction: column; gap: 2px; }
 .k-tendances .stat-label,
 .k-tendances .today-label { font: 600 0.66rem/1.35 var(--sans); letter-spacing: 0.16em; color: var(--muted); margin-bottom: 10px; }
@@ -3043,7 +3043,7 @@ button, input, select, textarea { font-family: inherit; }
 .k-tendances .granularity-btn:hover:not(.active) { border-color: var(--green); color: var(--green); }
 .k-tendances .granularity-btn.active { background: var(--green); border-color: var(--green); color: var(--on-green); }
 
-.k-tendances .follow-strip { border-radius: 3px; border: 1px solid var(--rule); background: var(--bg-alt); }
+.k-tendances .follow-strip { border-radius: 10px; border: 1px solid var(--rule); background: var(--bg-alt); }
 .k-tendances .follow-hint { font-size: 0.86rem; color: var(--muted); }
 .k-tendances .follow-toggle { border-radius: 50%; }
 .k-tendances .follow-toggle[aria-pressed="true"] { color: var(--green); }
