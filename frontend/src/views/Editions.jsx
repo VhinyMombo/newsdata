@@ -51,7 +51,12 @@ export default function Editions({ reports, sub }) {
   const title = (reportKind === 'daily' ? "Le point d'actualité du jour" : 'La revue de presse de la semaine');
 
   return (
-    <div className="k-page k-editions">
+    <div className="k-wrap k-page k-editions">
+      <header className="k-page-head">
+        <span className="k-eyebrow">Éditions</span>
+        <h1 className="k-title">L'actualité, déjà résumée</h1>
+        <p className="k-dek">Le point du jour et la revue de la semaine sont rédigés à partir de tous les titres publiés. La rédaction prend environ une minute, puis l'édition reste disponible et téléchargeable en PDF.</p>
+      </header>
       <div className="k-segmented" role="tablist" aria-label="Éditions">
         {TABS.map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => go(`editions/${k}`)}>{l}</button>

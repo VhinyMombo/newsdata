@@ -5,11 +5,11 @@ import { Thinking } from '../utils/text';
 function AskCodes({ ask }) {
   const [q, setQ] = useState('');
   return (
-    <form className="k-askbox" onSubmit={(e) => { e.preventDefault(); if (q.trim()) ask(q.trim(), 'codes'); }}>
+    <form className="k-askbox k-ask" onSubmit={(e) => { e.preventDefault(); if (q.trim()) ask(q.trim(), 'codes'); }}>
       <label htmlFor="codes-ask" className="sr-only">Poser une question sur les codes de loi gabonais</label>
       <Search size={18} aria-hidden="true" />
       <input id="codes-ask" value={q} onChange={e => setQ(e.target.value)} placeholder="Une question sur la loi, par exemple les sanctions pour le vol…" autoComplete="off" />
-      <button type="submit" disabled={!q.trim()}>Demander</button>
+      <button type="submit" className="k-btn primary" disabled={!q.trim()}>Demander</button>
     </form>
   );
 }
@@ -19,10 +19,11 @@ export default function Codes({ codes, ask }) {
   useEffect(() => { loadList(); }, [loadList]);
 
   return (
-    <div className="k-page k-codes">
+    <div className="k-wrap k-page k-codes">
       <header className="k-page-head">
-        <h2>Codes de loi</h2>
-        <p className="k-intro">Les codes gabonais publiés au Journal officiel, à parcourir article par article ou à interroger. Ce n'est pas un conseil juridique.</p>
+        <span className="k-eyebrow">Codes de loi</span>
+        <h1 className="k-title">La loi gabonaise, article par article</h1>
+        <p className="k-dek">Les codes publiés au Journal officiel, à parcourir ou à interroger en langage courant. Les réponses citent les articles exacts. Ce n'est pas un conseil juridique.</p>
       </header>
       <AskCodes ask={ask} />
 

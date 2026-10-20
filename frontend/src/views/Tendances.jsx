@@ -23,7 +23,12 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="k-page k-tendances">
+    <div className="k-wrap k-page k-tendances">
+      <header className="k-page-head">
+        <span className="k-eyebrow">Tendances</span>
+        <h1 className="k-title">Ce dont parle la presse, en chiffres</h1>
+        <p className="k-dek">Qui publie, sur quels sujets, et ce qui monte. Suivez un sujet avec l'étoile pour le retrouver à votre prochaine visite.</p>
+      </header>
       <div className="k-segmented" role="tablist" aria-label="Tendances">
         {[['chiffres', 'Les chiffres'], ['carte', 'La carte des sujets']].map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => go(`tendances/${k}`)}>{l}</button>

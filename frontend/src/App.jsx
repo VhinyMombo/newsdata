@@ -56,7 +56,6 @@ export default function App() {
         />
       )}
 
-      <h1 className="sr-only">Le Kiosque : la presse gabonaise, lue et interrogée</h1>
       <main className="k-main" id="contenu">
         {view === 'une' && <Une ask={ask} session={session} corpus={corpus} health={health} reports={reports} />}
         {view === 'assistant' && <Assistant chat={chat} compare={compare} health={health} sub={route.sub} />}
@@ -68,6 +67,12 @@ export default function App() {
         )}
         {view === 'codes' && <Codes codes={codes} ask={ask} />}
       </main>
+      <footer className="k-footer">
+        <div className="k-wrap k-footer-row">
+          <p><strong>Le Kiosque</strong>, un projet <a href="https://hodologic.fr/fr/work/le-kiosque" target="_blank" rel="noreferrer">Hodologic</a>. Les articles appartiennent à leurs journaux : chaque lien renvoie à leur site.</p>
+          <p className="k-muted">Les réponses sont rédigées par une IA à partir des articles cités. Vérifiez toujours les sources.</p>
+        </div>
+      </footer>
     </div>
   );
 }

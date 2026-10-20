@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, Map as MapIcon, RefreshCw, Square, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowUp, GitCompare, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, Trash2 } from 'lucide-react';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 
@@ -17,9 +17,9 @@ const SUGGESTIONS = {
 };
 
 const MODES = [
-  ['presse', 'Presse'],
-  ['codes', 'Codes de loi'],
-  ['comparer', 'Comparer'],
+  ['presse', 'Actualité', Newspaper, 'Cherche dans les articles des journaux gabonais.'],
+  ['codes', 'Lois', Scale, 'Cherche dans les codes publiés au Journal officiel.'],
+  ['comparer', 'Comparer', GitCompare, 'Un même sujet sur deux périodes.'],
 ];
 
 function Composer({ chat, inputRef, compact }) {
@@ -97,7 +97,7 @@ function Compare({ compare }) {
   );
   return (
     <div className="k-compare">
-      <p className="k-intro">Un même sujet sur deux périodes, pour voir ce qui a changé dans la couverture de la presse.</p>
+      <p className="k-dek small">Choisissez un sujet et deux périodes : l'assistant rédige une réponse pour chacune, pour voir ce qui a changé dans la couverture de la presse.</p>
       <form className="k-compare-form" onSubmit={submit}>
         <input className="k-input" placeholder="Sujet à comparer, par exemple la dette de l'État" value={topic} onChange={e => setTopic(e.target.value)} disabled={comparing} aria-label="Sujet à comparer" />
         <div className="k-segmented" role="group" aria-label="Périodes">
@@ -174,12 +174,22 @@ export default function Assistant({ chat, compare, sub }) {
   const hasSources = corpus === 'presse' && chatHistory.at(-1)?.sources?.length > 0;
 
   return (
-    <div className="k-page k-assistant">
+    <div className="k-wrap k-page k-assistant">
+      <header className="k-page-head">
+        <span className="k-eyebrow">Assistant</span>
+        <h1 className="k-title">{mode === 'comparer' ? 'Comparer deux périodes' : corpus === 'codes' ? 'Que dit la loi gabonaise ?' : 'Que voulez-vous savoir ?'}</h1>
+      </header>
       <div className="k-assistant-bar">
-        <div className="k-segmented" role="tablist" aria-label="Mode de l'assistant">
-          {MODES.map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={mode === k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{l}</button>
-          ))}
+        <div className="k-modes" role="tablist" aria-label="Où chercher">
+          {MODES.map((m) => {
+            const [k, l, Icon, d] = m;
+            return (
+            <button key={k} role="tab" aria-selected={mode === k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>
+              <Icon size={18} strokeWidth={1.7} aria-hidden="true" />
+              <span><b>{l}</b><small>{d}</small></span>
+            </button>
+            );
+          })}
         </div>
         {mode !== 'comparer' && !empty && (
           <div className="k-bar-actions">
@@ -191,15 +201,19 @@ export default function Assistant({ chat, compare, sub }) {
 
       {mode === 'comparer' ? <Compare compare={compare} /> : empty ? (
         <div className="k-hero">
-          <h2>{corpus === 'codes' ? 'Que dit la loi gabonaise ?' : 'Que voulez-vous savoir ?'}</h2>
-          <p className="k-intro">
-            {corpus === 'codes'
-              ? "L'assistant cherche dans les codes de loi gabonais et répond en citant les numéros d'articles. Ce n'est pas un conseil juridique."
-              : "L'assistant cherche dans les articles de la presse gabonaise et rédige une réponse où chaque affirmation renvoie à son article."}
-          </p>
           <Composer chat={chat} inputRef={inputRef} />
-          <div className="k-suggestions">
-            {SUGGESTIONS[corpus].map(s => <button key={s} className="k-chip" onClick={() => chat.runSearch(s)} disabled={searching}>{s}</button>)}
+          <p className="k-dek small">
+            {corpus === 'codes'
+              ? "La réponse cite les numéros d'articles exacts. Elle ne remplace pas un conseil juridique."
+              : "La réponse est rédigée à partir de cinq articles au plus, cités en dessous pour que vous puissiez vérifier."}
+          </p>
+          <div className="k-try">
+            <span className="k-label">Essayez</span>
+            <div className="k-try-grid">
+              {SUGGESTIONS[corpus].map(s => (
+                <button key={s} className="k-try-card" onClick={() => chat.runSearch(s)} disabled={searching}>{s}<ArrowUp size={15} className="k-try-arrow" /></button>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
