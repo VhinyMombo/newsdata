@@ -1,12 +1,12 @@
-/* Terracotta accent: one warm signal colour on top of navy and green, used sparingly
-   (title word, rules, sources, badges, chart highlights). Green stays for actions. */
+/* Bordeaux accent: one signal colour on top of navy, used for the title word, rules, sources,
+   badges, chart highlights and actions. */
 :root {
-  --pop: #C4562B;
-  --pop-ink: #A3431E;
-  --pop-soft: #F7E3D9;
-  --pop-on-deep: #EE9670;
-  --tint: #F7F1EC;
-  --hero: #FBF2EC;
+  --pop: #7A1F2B;
+  --pop-ink: #7A1F2B;
+  --pop-soft: #EBDDDF;
+  --pop-on-deep: #C39AA0;
+  --tint: #F6EFF0;
+  --hero: #F8F4F4;
 }
 
 /* where the accent shows */
@@ -30,8 +30,8 @@
 .k-src-n { background: var(--pop-soft); color: var(--pop-ink); }
 .k-tendances .stat-highlight .stat-label { color: var(--pop-on-deep); }
 
-/* Actions in terracotta, as on hodologic.fr: a darker shade keeps white text readable (5.5:1) */
-:root { --action: #A3431E; --action-hover: #8A3818; --action-soft: rgba(196, 86, 43, 0.08); }
+/* Actions in the same bordeaux: white text reads at 10:1 */
+:root { --action: #7A1F2B; --action-hover: #681A25; --action-soft: rgba(122, 31, 43, 0.08); }
 .k-btn.primary, .k-send { background: var(--action); border-color: var(--action); }
 .k-btn.primary:hover:not(:disabled), .k-send:hover:not(:disabled) { background: var(--action-hover); border-color: var(--action-hover); }
 .k-send:disabled { opacity: 1; }
