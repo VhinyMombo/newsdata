@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import '../styles/dashboard.css';
 import MetricsDashboard from './MetricsDashboard';
 import SemanticMap from './SemanticMap';
+import Moving from './Moving';
 import { go } from '../hooks/useRoute';
 import { Thinking } from '../utils/text';
 
@@ -26,11 +27,11 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
     <div className="k-wrap k-page k-tendances">
       <header className="k-page-head">
         <span className="k-eyebrow">Tendances</span>
-        <h1 className="k-title">Ce dont parle la presse, en chiffres</h1>
-        <p className="k-dek">Qui publie, sur quels sujets, et ce qui monte. Suivez un sujet avec l'étoile pour le retrouver à votre prochaine visite.</p>
+        <h1 className="k-title">Ce qui bouge dans la presse</h1>
+        <p className="k-dek">Les noms et les sujets qui reviennent plus que d'habitude cette semaine. Touchez-en un pour demander à l'assistant ce qui se passe.</p>
       </header>
       <div className="k-segmented" role="tablist" aria-label="Tendances">
-        {[['chiffres', 'Les chiffres'], ['carte', 'La carte des sujets']].map(([k, l]) => (
+        {[['chiffres', 'Cette semaine'], ['carte', 'La carte des sujets']].map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => go(`tendances/${k}`)}>{l}</button>
         ))}
       </div>
@@ -41,7 +42,9 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
       ) : tab === 'carte' ? (
         <SemanticMap data={data} latestSources={latestSources} isPhone={isPhone} />
       ) : (
-        <MetricsDashboard data={data} gabonToday={health.gabonToday} onAskAssistant={(q) => ask(q)} user={session.user} authToken={session.authToken} />
+        <Moving data={data} ask={ask}>
+          <MetricsDashboard data={data} gabonToday={health.gabonToday} onAskAssistant={(q) => ask(q)} user={session.user} authToken={session.authToken} />
+        </Moving>
       )}
     </div>
   );
