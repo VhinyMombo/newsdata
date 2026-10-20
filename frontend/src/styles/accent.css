@@ -7,6 +7,10 @@
   --pop-on-deep: #C39AA0;
   --tint: #F6EFF0;
   --hero: #F8F4F4;
+  /* the old green tokens carry bordeaux, so every hover, focus and selected state follows */
+  --green: #7A1F2B;
+  --green-hover: #681A25;
+  --green-soft: rgba(122, 31, 43, 0.08);
   /* dark cards in deep bordeaux, as hodologic.fr's footer */
   --deep: #3D1017;
   --deep-ink: #F3E9EA;
@@ -44,3 +48,6 @@
 .k-modes button.on { border-color: var(--action); background: var(--action-soft); box-shadow: inset 0 0 0 1px var(--action); }
 .k-modes button.on svg { color: var(--action); }
 .k-briefing .k-eyebrow::before, .k-move-card.lead .k-eyebrow::before { background: var(--pop-on-deep); }
+
+/* Rounder shapes: cards and fields 10px, the button inside the ask box a step smaller so the corners nest */
+.k-askbox .k-btn, .k-composer .k-send { border-radius: 7px; }
