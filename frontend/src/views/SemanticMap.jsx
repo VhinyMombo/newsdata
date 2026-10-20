@@ -87,7 +87,7 @@ export default function SemanticMap({ data, latestSources, isPhone }) {
     const axis = { visible: false };
     Plotly.react(gd, traces, {
       colorway: PLOT_COLORWAY, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-      font: { color: '#5B6B7A', family: 'Poppins' }, showlegend: false, margin: { l: 0, r: 0, b: 0, t: 0 },
+      font: { color: '#5B6B7A', family: 'Hanken Grotesk' }, showlegend: false, margin: { l: 0, r: 0, b: 0, t: 0 },
       hoverlabel: { bgcolor: '#FFFFFF', bordercolor: '#6B8F7A', align: 'left', font: { size: 11.5 } },
       ...(dim === '3D' ? { scene: { xaxis: axis, yaxis: axis, zaxis: axis, bgcolor: 'transparent' } } : { xaxis: axis, yaxis: axis }),
     }, { responsive: true, displayModeBar: false });

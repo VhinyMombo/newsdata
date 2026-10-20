@@ -3011,7 +3011,7 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ── Hodologic layer ──────────────────────────────────────────────────────
    Brings the dashboard into the site's system: 3px corners, 1px rules, eyebrow labels,
-   regular-weight Playfair for figures and titles, pill selectors like .k-segmented.
+   regular-weight Newsreader for figures and titles, pill selectors like .k-segmented.
    Scoped to .k-tendances so it wins over the rules above without editing them. */
 .k-tendances .metrics-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 4px; }
 .k-tendances .stat-card,

@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Poppins:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600&display=swap');
 
 /* Le Kiosque in the Hodologic design system (hodologic.fr): white page, navy ink, one green,
-   Playfair at regular weight for what is read, Poppins for what is used, 1px rules and
+   Newsreader at regular weight for what is read, Hanken Grotesk for what is used, 1px rules and
    3px corners. Built to be easy first: large targets, plain words, one obvious next step. */
 :root {
   --white: #FFFFFF;
@@ -20,8 +20,8 @@
   --deep-soft: #C4CFD3;
   --clay: #A8431F;
   --clay-soft: rgba(168, 67, 31, 0.07);
-  --serif: 'Playfair Display', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
-  --sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --sans: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --nav-h: 68px;
   --read: 720px;
   --tabbar-h: 0px;
