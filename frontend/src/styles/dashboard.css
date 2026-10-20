@@ -3008,3 +3008,55 @@ button, input, select, textarea { font-family: inherit; }
 .keyword-count, .source-delta, .weekday-count { font-variant-numeric: tabular-nums; }
 ::selection { background: rgba(46, 85, 75, 0.18); }
 
+
+/* ── Hodologic layer ──────────────────────────────────────────────────────
+   Brings the dashboard into the site's system: 3px corners, 1px rules, eyebrow labels,
+   regular-weight Playfair for figures and titles, pill selectors like .k-segmented.
+   Scoped to .k-tendances so it wins over the rules above without editing them. */
+.k-tendances .metrics-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.k-tendances .stat-card,
+.k-tendances .chart-container,
+.k-tendances .today-comparison,
+.k-tendances .follow-card,
+.k-tendances .freshness-card { border-radius: 3px; border: 1px solid var(--rule); box-shadow: none; background: var(--white); }
+.k-tendances .stat-card { padding: 20px 22px; display: flex; flex-direction: column; gap: 2px; }
+.k-tendances .stat-label,
+.k-tendances .today-label { font: 600 0.66rem/1.35 var(--sans); letter-spacing: 0.16em; color: var(--muted); margin-bottom: 10px; }
+.k-tendances .stat-value { font-family: var(--serif); font-weight: 400; font-size: 2.1rem; line-height: 1.1; color: var(--ink); letter-spacing: -0.01em; }
+.k-tendances .stat-value-sm { font-family: var(--sans); font-weight: 500; font-size: 1rem; line-height: 1.4; }
+.k-tendances .stat-detail { font-size: 0.76rem; margin-top: 6px; }
+.k-tendances .stat-highlight { background: var(--deep); border-color: var(--deep); }
+.k-tendances .stat-highlight .stat-label { color: #A9C7B6; }
+.k-tendances .stat-highlight .stat-value { color: var(--deep-ink); }
+.k-tendances .stat-card.stat-alert { border-color: rgba(168, 67, 31, 0.35); background: var(--clay-soft); }
+
+.k-tendances .today-comparison { padding: 22px 26px; gap: 28px; }
+.k-tendances .today-count { font-family: var(--serif); font-weight: 400; font-size: 2.4rem; color: var(--ink); }
+
+.k-tendances .chart-container { padding: clamp(18px, 2.4vw, 28px); }
+.k-tendances .chart-header { padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; gap: 12px; }
+.k-tendances .chart-title { font-size: 1.45rem; line-height: 1.2; }
+.k-tendances .chart-note { font-size: 0.82rem; color: var(--muted); }
+
+.k-tendances .granularity-selector { background: transparent; padding: 0; gap: 6px; flex-wrap: wrap; border-radius: 0; }
+.k-tendances .granularity-btn { min-height: 32px; padding: 0.3rem 0.85rem; border: 1px solid var(--rule-strong); border-radius: 999px; background: var(--white); font-size: 0.78rem; font-weight: 500; color: var(--ink-soft); }
+.k-tendances .granularity-btn:hover:not(.active) { border-color: var(--green); color: var(--green); }
+.k-tendances .granularity-btn.active { background: var(--green); border-color: var(--green); color: var(--on-green); }
+
+.k-tendances .follow-strip { border-radius: 3px; border: 1px solid var(--rule); background: var(--bg-alt); }
+.k-tendances .follow-hint { font-size: 0.86rem; color: var(--muted); }
+.k-tendances .follow-toggle { border-radius: 50%; }
+.k-tendances .follow-toggle[aria-pressed="true"] { color: var(--green); }
+
+.k-tendances .source-bar-fill { border-radius: 2px; }
+.k-tendances .source-bar-track { border-radius: 2px; background: var(--bg-alt); }
+.k-tendances .source-bar-label { font-weight: 500; text-transform: none; }
+.k-tendances .source-bar-label:hover { color: var(--green); }
+
+.k-tendances .custom-treemap-container { gap: 0; }
+.k-tendances .custom-treemap-box { border-radius: 2px; }
+.k-tendances .custom-treemap-name { font-weight: 500; }
+
+.k-tendances .keyword-rank { color: var(--green); }
+.k-tendances .weekday-cell { border-radius: 2px; }
+.k-tendances .html-legend-item { font-size: 0.78rem; }

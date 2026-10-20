@@ -4,6 +4,7 @@ import {
   Landmark, TrendingUp, Users, Scale, Trophy, MapPin, Palette, Leaf, Building2, Globe, HeartPulse, GraduationCap, Package, Star, X, Flame, BellOff,
 } from 'lucide-react';
 import { API_URL } from '../utils/api';
+import { sourceLabel } from '../utils/format';
 import { normalizeCategory, titleWords, titlePhrases, computeFollowDeltas, PROFILE_COLORS, PROFILE_OTHER, PROFILE_OTHER_COLOR } from '../utils/categories';
 
 // ── Custom Treemap Algorithm using Squarify approach ───────────────────────
@@ -147,7 +148,7 @@ function CustomTreemap({ data, total, categories, isFollowed, toggleFollow, onAs
                   const srcPct = ((count / item.value) * 100).toFixed(1);
                   return (
                     <div key={src} className="breakdown-row">
-                      <span className="breakdown-src">{src}</span>
+                      <span className="breakdown-src">{sourceLabel(src)}</span>
                       <span className="breakdown-pct">{srcPct}%</span>
                     </div>
                   );
@@ -404,7 +405,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
         trendKeys = sortedTimeKeys.filter(k => k >= cutoff);
       }
       const trendTraces = mainSources.map(src => ({
-        name: src,
+        name: sourceLabel(src),
         x: trendKeys,
         y: trendKeys.map(k => timeSeries[k][src] || 0),
         type: 'scatter',
@@ -462,7 +463,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
         ? [...mainEntries, [`${OTHER_LABEL} (${tailSources.length} sources)`, tailTotal]]
         : mainEntries;
       const donutTrace = {
-        labels: donutEntries.map(e => e[0]),
+        labels: donutEntries.map(e => sourceLabel(e[0])),
         values: donutEntries.map(e => e[1]),
         type: 'pie',
         hole: 0.55,
@@ -878,7 +879,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
           } : {}),
           font: { family: 'inherit', size: 12 },
           annotations: [{
-            text: `<b>${stats.total.toLocaleString()}</b><br>articles`,
+            text: `<b>${stats.total.toLocaleString('fr-FR')}</b><br>articles`,
             showarrow: false, font: { size: mobile ? 15 : 18, color: '#34495A' }
           }]
         }, { responsive: true, displayModeBar: false });
@@ -943,7 +944,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
       <div className="metrics-grid">
         <div className="stat-card stat-highlight">
           <span className="stat-label">Articles collectés</span>
-          <div className="stat-value">{stats.total.toLocaleString()}</div>
+          <div className="stat-value">{stats.total.toLocaleString('fr-FR')}</div>
         </div>
         <div className="stat-card">
           <span className="stat-label">Période couverte</span>
@@ -951,7 +952,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
         </div>
         <div className="stat-card">
           <span className="stat-label">Articles par jour en moyenne</span>
-          <div className="stat-value">{stats.avgPerDay}</div>
+          <div className="stat-value">{String(stats.avgPerDay).replace('.', ',')}</div>
         </div>
         <div className="stat-card">
           <span className="stat-label">Rubriques recensées</span>
@@ -960,15 +961,15 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
         {stats.topSource && (
           <div className="stat-card">
             <span className="stat-label">Média le plus prolifique</span>
-            <div className="stat-value stat-value-sm">{stats.topSource[0]}</div>
-            <span className="stat-detail">{stats.topSource[1].toLocaleString()} articles</span>
+            <div className="stat-value stat-value-sm">{sourceLabel(stats.topSource[0])}</div>
+            <span className="stat-detail">{stats.topSource[1].toLocaleString('fr-FR')} articles</span>
           </div>
         )}
         {stats.topCategory && (
           <div className="stat-card">
             <span className="stat-label">Thème le plus couvert</span>
             <div className="stat-value stat-value-sm">{stats.topCategory[0]}</div>
-            <span className="stat-detail">{stats.topCategory[1].toLocaleString()} articles</span>
+            <span className="stat-detail">{stats.topCategory[1].toLocaleString('fr-FR')} articles</span>
           </div>
         )}
         <div className="stat-card">
@@ -1049,7 +1050,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
             </div>
             <div className="today-vs">
               <span className="today-vs-label">Moyenne des {todayName.toLowerCase()}s</span>
-              <span className="today-vs-avg">{avgForDay.toFixed(1)} articles</span>
+              <span className="today-vs-avg">{avgForDay.toFixed(1).replace('.', ',')} articles</span>
               <span className="today-vs-pct" style={{ color: isAbove ? '#2E554B' : '#A8433A' }}>
                 {isAbove ? '▲' : '▼'} {Math.abs(pctDiff)}%
               </span>
@@ -1120,10 +1121,10 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
                   </button>
                   <button
                     className="source-bar-label"
-                    onClick={() => onAskAssistant(`Quelles sont les dernières actualités de ${name} ?`)}
-                    title={`Demander à l'assistant : dernières actualités de ${name}`}
+                    onClick={() => onAskAssistant(`Quelles sont les dernières actualités de ${sourceLabel(name)} ?`)}
+                    title={`Demander à l'assistant : dernières actualités de ${sourceLabel(name)}`}
                   >
-                    {name}
+                    {sourceLabel(name)}
                   </button>
                   <div className="source-bar-track">
                     <div
@@ -1396,7 +1397,7 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
             const fresh = daysAgo <= 1 ? 'fresh' : daysAgo <= 7 ? 'recent' : 'stale';
             return (
               <div key={src} className={`freshness-card freshness-${fresh}`}>
-                <span className="freshness-source">{src}</span>
+                <span className="freshness-source">{sourceLabel(src)}</span>
                 <span className="freshness-date">{lastDate}</span>
                 <span className="freshness-badge">
                   {daysAgo === 0 ? "Aujourd'hui" : daysAgo === 1 ? 'Hier' : `Il y a ${daysAgo}j`}
