@@ -2224,7 +2224,7 @@ select:focus-visible {
 .plot-caption {
   flex-basis: 100%;
   font-size: 0.78rem;
-  font-style: italic;
+  font-style: normal;
   color: var(--text-3);
 }
 
@@ -2329,7 +2329,7 @@ select:focus-visible {
 .today-stale-note {
   font-size: 0.72rem;
   color: var(--text-3);
-  font-style: italic;
+  font-style: normal;
 }
 
 /* ── Report loading skeleton: shape of the report, not just a spinner ── */
@@ -2913,7 +2913,7 @@ select:focus-visible {
   color: var(--text-3);
 }
 
-.compare-queued { font-style: italic; }
+.compare-queued { font-style: normal; }
 
 @media (max-width: 768px) {
   .compare-columns { grid-template-columns: 1fr; }

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Hanken+Grotesk:wght@400;500;600&display=swap');
 
 /* Le Kiosque in the Hodologic design system (hodologic.fr): white page, navy ink, one green,
    Newsreader at regular weight for what is read, Hanken Grotesk for what is used, 1px rules and
@@ -79,9 +79,9 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-eyebrow::before { content: ""; width: 24px; height: 1px; background: currentColor; flex: none; }
 .k-label, .k-kicker { display: block; font: 600 0.7rem/1.3 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 .k-display { font-size: clamp(2.3rem, 5vw, 4.2rem); line-height: 1.05; letter-spacing: -0.015em; max-width: 16ch; }
-.k-display em, .k-title em { font-style: italic; color: var(--green); }
+.k-display em, .k-title em { font-style: normal; color: var(--green); }
 .k-title { font-size: clamp(2rem, 3.8vw, 3rem); line-height: 1.08; letter-spacing: -0.01em; }
-.k-dek { font-family: var(--serif); font-style: italic; font-size: clamp(1.1rem, 1.7vw, 1.35rem); line-height: 1.5; color: var(--ink-soft); max-width: 46em; margin-top: 1rem; }
+.k-dek { font-family: var(--serif); font-size: clamp(1.1rem, 1.7vw, 1.35rem); line-height: 1.5; color: var(--ink-soft); max-width: 46em; margin-top: 1rem; }
 .k-dek.small { font-size: 1rem; margin-top: 0.8rem; }
 .k-intro { color: var(--ink-soft); max-width: 62ch; }
 .k-muted { color: var(--muted); font-size: 0.86rem; }
@@ -475,3 +475,6 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-move-more a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .k-move-more span { font-size: 12px; color: var(--deep-soft); }
 .k-move-card .k-move-sources { margin-top: auto; }
+
+/* No italics anywhere: emphasis is carried by colour or weight */
+em, i, cite, dfn, address { font-style: normal; }
