@@ -83,9 +83,12 @@ IMAGE=$(oci compute image list --compartment-id "$TENANCY" --operating-system "C
 log "Image : $IMAGE"
 
 # ------------------------------------------------------------------ retry ---
+# One launch per round, cycling through the shapes: two launches back to back
+# trip Oracle's rate limit (429), so the second shape would never be tried
+read -ra shapes <<<"$SHAPES"
 attempt=0
 while true; do
-  for s in $SHAPES; do
+  for s in "${shapes[$((attempt % ${#shapes[@]}))]}"; do
     ocpus=${s%%:*}; mem=${s##*:}
     attempt=$((attempt + 1))
     if out=$(oci compute instance launch --compartment-id "$TENANCY" --availability-domain "$AD" \
