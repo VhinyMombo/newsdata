@@ -1,0 +1,49 @@
+# Le Kiosque — production override for a single public server.
+#
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml \
+#       --profile ollama up -d --build
+#
+# On top of the base file: Caddy in front for HTTPS (Let's Encrypt), Ollama in
+# a container for the embeddings only (the chat model is a hosted API, see
+# llm.py), and nothing but ports 80/443 published.
+
+services:
+  api:
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      - ollama
+
+  pipeline:
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+
+  web:
+    # Caddy reaches nginx over the compose network
+    ports: !override []
+
+  ollama:
+    environment:
+      # Keep embeddinggemma loaded: a cold load adds seconds to every search
+      OLLAMA_KEEP_ALIVE: "-1"
+    ports: !override []
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      KIOSQUE_DOMAIN: ${KIOSQUE_DOMAIN:-lekiosque.hodologic.fr}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+
+volumes:
+  caddy-data:
+  caddy-config:

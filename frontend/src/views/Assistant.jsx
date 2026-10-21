@@ -76,7 +76,7 @@ function Turn({ entry, idx, live, chat }) {
           )}
         </div>
       ) : entry.sources ? (
-        <Thinking phrases={['Lecture des articles retrouvés…', 'Rédaction de la réponse…', 'Vérification des dates et des sources…', 'Le modèle local prend parfois une à trois minutes…']} />
+        <Thinking phrases={['Lecture des articles retrouvés…', 'Rédaction de la réponse…', 'Vérification des dates et des sources…', 'Encore un instant…']} />
       ) : (
         <Thinking interval={3500} phrases={['Recherche dans le corpus…', 'Sélection des articles pertinents…']} />
       )}
@@ -131,7 +131,7 @@ function Compare({ compare }) {
                 </header>
                 {col.queued && <p className="k-muted">En attente : l'autre période est en cours de traitement…</p>}
                 {col.loading && !col.answer && !col.error && !col.empty && (
-                  <Thinking interval={4000} phrases={['Recherche dans les articles de la période…', 'Lecture des articles retrouvés…', 'Rédaction de la réponse…', 'Le modèle local prend parfois une à trois minutes…']} />
+                  <Thinking interval={4000} phrases={['Recherche dans les articles de la période…', 'Lecture des articles retrouvés…', 'Rédaction de la réponse…', 'Encore un instant…']} />
                 )}
                 {col.error || col.timedOut ? (
                   <div className="k-error">

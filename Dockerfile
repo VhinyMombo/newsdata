@@ -80,7 +80,7 @@ RUN useradd --create-home --uid 10001 kiosque \
     && mkdir -p /data /app/newspaper_chroma_db /app/codes_chroma_db \
     && chown -R kiosque:kiosque /data /app
 
-COPY --chown=kiosque:kiosque api.py auth.py report_archive.py report_pdf.py \
+COPY --chown=kiosque:kiosque api.py auth.py llm.py report_archive.py report_pdf.py \
      lekiosque_theme.py push_notify.py ./
 COPY --chown=kiosque:kiosque scripts/ ./scripts/
 

@@ -17,7 +17,9 @@ import umap
 from sklearn.decomposition import PCA
 from sklearn.cluster import HDBSCAN
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_ollama.chat_models import ChatOllama
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import llm  # noqa: E402
 
 
 ROOT_DIR = Path(__file__).parent.parent
@@ -86,8 +88,8 @@ def main() -> None:
     cluster_names = {}
     
 
-    print("Generating cluster names with llama3...")
-    llm = ChatOllama(model=os.getenv('OLLAMA_CHAT_MODEL', 'llama3'), temperature=0.2)
+    print(f"Generating cluster names with {llm.PROVIDER}/{llm.MODEL}...")
+    namer = llm.chat_model(temperature=0.2)
     
     for c_id in unique_clusters:
         if c_id == -1:
@@ -123,7 +125,7 @@ def main() -> None:
         
         try:
             msg = [SystemMessage(content="Tu es un journaliste synthétique."), HumanMessage(content=prompt)]
-            name = llm.invoke(msg).content.strip().replace('"', '').replace("'", "")
+            name = namer.invoke(msg).content.strip().replace('"', '').replace("'", "")
             cluster_names[c_id] = name
             print(f"  Cluster {c_id} ({len(indices)} articles) -> {name}")
         except Exception as e:

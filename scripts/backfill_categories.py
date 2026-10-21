@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import api  # noqa: E402  (chroma collection + chat model config)
 
 from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
-from langchain_ollama.chat_models import ChatOllama  # noqa: E402
+import llm  # noqa: E402
 
 TAXONOMY = [
     "Politique", "Économie", "Société", "Sport", "Faits Divers / Justice",
@@ -123,10 +123,7 @@ def main():
         todo = todo[:args.limit]
         print(f"(limité à {len(todo)} pour ce passage)")
 
-    llm = ChatOllama(model=api.CHAT_MODEL, temperature=0,
-                     **({"reasoning": False}
-                        if api.CHAT_MODEL.lower().startswith(api._REASONING_MODEL_PREFIXES)
-                        else {}))
+    classifier = llm.chat_model(temperature=0)
 
     assigned = Counter()
     skipped = 0
@@ -161,7 +158,7 @@ def main():
     for start in range(0, len(needs_llm), args.batch_size):
         batch = needs_llm[start:start + args.batch_size]
         try:
-            cats = classify_batch(llm, [t[1] for t in batch])
+            cats = classify_batch(classifier, [t[1] for t in batch])
         except Exception as e:
             print(f"  batch {start}: erreur LLM ({e}), ignoré")
             skipped += len(batch)

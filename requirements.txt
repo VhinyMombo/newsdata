@@ -16,6 +16,8 @@ langchain==1.2.10
 langchain-core==1.2.16
 langchain-chroma==1.1.0
 langchain-ollama==1.0.1
+# Hosted chat models (Gemini, Groq) through their OpenAI-compatible endpoints
+langchain-openai==1.1.10
 
 # --- Reports (PDF, charts, word clouds) ------------------------------------
 reportlab==5.0.0

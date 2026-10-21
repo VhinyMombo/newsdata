@@ -3,7 +3,8 @@
 Lightweight FastAPI server providing a RAG search + answer endpoint.
 
 Embeds the user's question, retrieves the top-K articles from ChromaDB,
-then generates a synthesised answer using a local Ollama LLM.
+then generates a synthesised answer with the configured chat model
+(local Ollama, or a hosted API — see llm.py).
 
 Usage:
     .venv/bin/python api.py          # runs on http://localhost:8000
@@ -29,11 +30,11 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_ollama.chat_models import ChatOllama
 from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import BaseModel, Field
 
 import auth
+import llm
 
 load_dotenv()
 
@@ -43,7 +44,6 @@ COLLECTION_NAME = "newspaper_gabon"
 CODES_PERSIST_DIR = ROOT_DIR / "codes_chroma_db"
 CODES_COLLECTION_NAME = "codes_gabon"
 EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "embeddinggemma")
-CHAT_MODEL  = os.getenv("OLLAMA_CHAT_MODEL",  "qwen3.5:9b")
 OLLAMA_URL  = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 RELEVANCE_THRESHOLD  = float(os.getenv("RELEVANCE_THRESHOLD",  "1.7"))
 # Legal queries are phrased farther from statute wording — slightly looser cutoff
@@ -138,19 +138,9 @@ logger.info(f"Loading ChromaDB from {PERSIST_DIR}...")
 _client     = chromadb.PersistentClient(path=str(PERSIST_DIR))
 _collection = _client.get_collection(COLLECTION_NAME)
 _embedder   = OllamaEmbeddings(model=EMBED_MODEL)
-# Reasoning models (Qwen3, DeepSeek-R1…) think in hidden tokens before answering,
-# which multiplies generation time — off by default, RAG synthesis rarely needs it.
-# Set OLLAMA_REASONING=true to enable thinking on models that support it.
-_REASONING_MODEL_PREFIXES = ("qwen3", "deepseek-r1", "magistral", "gpt-oss")
-REASONING_ENABLED = os.getenv("OLLAMA_REASONING", "false").lower() == "true"
-_llm = ChatOllama(
-    model=CHAT_MODEL,
-    temperature=0.2,
-    num_ctx=CHAT_NUM_CTX,
-    **({"reasoning": REASONING_ENABLED}
-       if CHAT_MODEL.lower().startswith(_REASONING_MODEL_PREFIXES) else {}),
-)
-logger.info(f"✅ {_collection.count()} articles ready  |  LLM: {CHAT_MODEL}")
+CHAT_MODEL = llm.MODEL
+_llm = llm.chat_model(temperature=0.2, num_ctx=CHAT_NUM_CTX)
+logger.info(f"✅ {_collection.count()} articles ready  |  LLM: {llm.PROVIDER}/{CHAT_MODEL}")
 
 # Legal codes corpus (optional second collection — same embedding model)
 try:
@@ -716,6 +706,7 @@ def health():
         "status": "ok",
         "articles": _article_count(),
         "llm": CHAT_MODEL,
+        "llm_provider": llm.PROVIDER,
         "ollama": _ollama_reachable(),
         "last_article_date": _latest_article_date(),
         # Authoritative "today" for the frontend: a visitor's device clock
@@ -1174,7 +1165,7 @@ def answer(request: Request, req: AnswerRequest):
             logger.error(f"LLM streaming error: {e}")
             yield (
                 "\n\n[Erreur : la génération a été interrompue. "
-                "Vérifiez qu'Ollama est démarré puis réessayez.]"
+                "Réessayez dans un instant.]"
             )
             return
         # Same truncation guard as the report cache: an unfinished answer
@@ -1195,14 +1186,7 @@ _report_cache: dict = {
 # bounded. Same num_ctx as the chat handle — a different value would force Ollama
 # to reload the model between chat and report calls (minutes lost each switch).
 REPORT_NUM_CTX = int(os.getenv("REPORT_NUM_CTX", str(CHAT_NUM_CTX)))
-_report_llm = ChatOllama(
-    model=CHAT_MODEL,
-    temperature=0.3,
-    num_ctx=REPORT_NUM_CTX,
-    num_predict=2000,
-    **({"reasoning": REASONING_ENABLED}
-       if CHAT_MODEL.lower().startswith(_REASONING_MODEL_PREFIXES) else {}),
-)
+_report_llm = llm.chat_model(temperature=0.3, num_ctx=REPORT_NUM_CTX, max_tokens=2000)
 
 
 def get_weekly_system() -> str:
