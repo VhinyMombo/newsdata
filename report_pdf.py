@@ -23,7 +23,7 @@ import os
 from lekiosque_theme import (ACCENT, ACCENT_SOFT, FONT, INK, MUTED,
                              SOURCE_LINE, lekiosque_theme, to_png)
 
-# Fonts, cover field and mark, shared with the Hodologic papers
+# Fonts shared with the Hodologic papers, and the Kiosque mark
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "report")
 
 # Same reasoning as api.py's gabon_now(): the server's system timezone can
@@ -562,9 +562,10 @@ def build_weekly_pdf(text: str, start: datetime, now: datetime, n_articles: int,
         left, right, top = 18 * mm, W - 18 * mm, H - 16 * mm
         ink = colors.HexColor(INK)
 
-        # Contour field: the bordeaux square whose lines run off the right edge
-        c.drawImage(os.path.join(ASSETS, "cover-field.png"), 0, H - 34 * mm - 112 * mm,
-                    width=W, height=112 * mm, mask="auto")
+        # The Kiosque mark, large, where the Hodologic papers put their field
+        big = 92 * mm
+        c.drawImage(os.path.join(ASSETS, "kiosque-mark-large.png"), left, H - 40 * mm - big,
+                    width=big, height=big, mask="auto")
 
         # Top bar: Kiosque mark and wordmark, document kind on the right
         mark = 7.5 * mm
