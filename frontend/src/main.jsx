@@ -23,3 +23,6 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+// Lift the installed app's splash (index.html) once the first frame is painted
+requestAnimationFrame(() => window.__kiosqueReady?.())

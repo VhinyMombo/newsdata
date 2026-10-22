@@ -20,7 +20,8 @@ export default defineConfig({
         // data.json is a ~20MB corpus export fetched at startup (see App.jsx) —
         // never precache it, it must always hit the network like today.
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
-        globIgnores: ['data.json'],
+        // Launch images are fetched by iOS itself, only at install: no need to precache them
+        globIgnores: ['data.json', 'splash/**'],
         // Main bundle is ~5MB (plotly.js is the bulk of it); above Workbox's
         // 2MB default. Raise the ceiling rather than exclude it from
         // precache, so the app still works offline after first load.
