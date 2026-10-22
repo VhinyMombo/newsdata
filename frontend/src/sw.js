@@ -1,9 +1,15 @@
-import { precacheAndRoute } from 'workbox-precaching'
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
+import { clientsClaim } from 'workbox-core'
 import { registerRoute } from 'workbox-routing'
 import { NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
+// registerType 'autoUpdate': a new deploy takes over at once instead of
+// waiting for every open tab to close, which kept old builds on screen
+self.skipWaiting()
+clientsClaim()
+cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
 // Same policy as the previous generateSW config: read endpoints get a short
