@@ -29,10 +29,10 @@ export default function App() {
 
   // Any view can hand a question to the assistant, in either corpus
   const { switchCorpus, runSearch } = chat;
-  const ask = useCallback((q, target = 'presse') => {
+  const ask = useCallback((q, target = 'presse', pinned = null) => {
     switchCorpus(target);
     go('assistant');
-    runSearch(q, null, target);
+    runSearch(q, null, target, pinned);
   }, [switchCorpus, runSearch]);
 
   const view = ['une', 'assistant', 'editions', 'tendances', 'codes'].includes(route.view) ? route.view : 'une';

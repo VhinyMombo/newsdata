@@ -31,9 +31,11 @@ export function useChat({ setApiStatus }) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const runSearch = useCallback(async (userQ, existingIdx = null, corpusOverride = null) => {
+  // pinned: an article the reader clicked; it leads the sources whatever the search finds
+  const runSearch = useCallback(async (userQ, existingIdx = null, corpusOverride = null, pinned = null) => {
     if (!acquire()) return;
     const c = corpusOverride || corpus;
+    if (existingIdx !== null) pinned = pinned || chatRef.current[existingIdx]?.pinned || null;
     setSearching(true);
     const controller = new AbortController();
     abortRef.current = controller;
@@ -42,7 +44,7 @@ export function useChat({ setApiStatus }) {
     const prevQuestion = priorTurns.length ? priorTurns[priorTurns.length - 1].question : '';
 
     const idx = existingIdx ?? chatRef.current.length;
-    const fresh = { question: userQ, answer: '', sources: null, error: null };
+    const fresh = { question: userQ, answer: '', sources: null, error: null, pinned };
     setChatHistory(prev => (existingIdx === null ? [...prev, fresh] : prev.map((t, i) => (i === idx ? fresh : t))));
     const patch = (p) => setChatHistory(prev => prev.map((t, i) => (i === idx ? { ...t, ...p } : t)));
 
@@ -51,12 +53,15 @@ export function useChat({ setApiStatus }) {
       const res = await postJSON('/search', { question: userQ, n_results: 5, previous_question: prevQuestion, corpus: c }, controller.signal);
       if (!res.ok) throw new Error(await errorDetail(res));
       const json = await res.json();
-      patch({ sources: json.results });
+      const sources = pinned
+        ? [pinned, ...json.results.filter(r => r.url !== pinned.url)].slice(0, 5)
+        : json.results;
+      patch({ sources });
 
       const streamRes = await postJSON('/answer', {
         question: userQ,
         corpus: c,
-        urls: c === 'codes' ? [] : json.results.map(r => r.url),
+        urls: c === 'codes' ? [] : sources.map(r => r.url),
         ids: c === 'codes' ? json.results.map(r => r.id) : [],
         history: priorTurns.slice(-HISTORY_TURNS).map(t => ({ question: t.question, answer: t.answer.slice(0, HISTORY_ANSWER_CHARS) })),
       }, controller.signal);

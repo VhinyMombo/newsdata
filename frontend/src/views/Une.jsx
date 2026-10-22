@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Star } from 'lucide-react';
+import { ArrowRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
 import { API_URL, authHeaders } from '../utils/api';
 import { clock, longDate, sourceLabel } from '../utils/format';
 import { computeFollowDeltas } from '../utils/categories';
@@ -27,16 +27,26 @@ function AskBox({ ask }) {
   );
 }
 
-// An article: the whole card is the link, and the arrow says it opens the newspaper's site
-function Story({ a, size = 'm', lede = true }) {
+// A click on an article goes to the assistant first: it explains the article
+// and its context, and cites it first with the link to the newspaper's site
+function explain(ask, a) {
+  return (e) => {
+    e.preventDefault();
+    ask(`Que dit cet article et dans quel contexte s'inscrit-il : « ${a.title.slice(0, 300)} » ?`, 'presse',
+      { url: a.url, title: a.title, source: a.source, date: (a.time || '').slice(0, 10) });
+  };
+}
+
+// An article: the whole card is the link, and the mark says the assistant opens it
+function Story({ a, ask, size = 'm', lede = true }) {
   const t = clock(a.time);
   return (
-    <a className={`k-story k-story-${size}`} href={a.url} target="_blank" rel="noreferrer">
+    <a className={`k-story k-story-${size}`} href="#/assistant" onClick={explain(ask, a)}>
       <h3>{a.title}</h3>
       {lede && a.lede && <p className="k-lede">{a.lede}</p>}
       <p className="k-meta">
         <span className="k-src">{sourceLabel(a.source)}</span>{t && <> · <time>{t}</time></>}
-        <ArrowUpRight size={14} aria-label="ouvre le site du journal" />
+        <Sparkles size={14} aria-label="expliqué par l'assistant" />
       </p>
     </a>
   );
@@ -139,13 +149,13 @@ export default function Une({ ask, session, corpus, health, reports }) {
             <div className="k-front">
               <section className="k-lead" id={anchor(lead.name)} aria-labelledby="une-lead">
                 <span className="k-eyebrow" id="une-lead">À la une · {lead.name}</span>
-                <Story a={lead.articles[0]} size="xl" />
+                <Story ask={ask} a={lead.articles[0]} size="xl" />
                 <div className="k-grid3">
-                  {lead.articles.slice(1, 4).map(a => <Story key={a.url} a={a} size="s" lede={false} />)}
+                  {lead.articles.slice(1, 4).map(a => <Story ask={ask} key={a.url} a={a} size="s" lede={false} />)}
                 </div>
                 {lead.articles.length > 4 && (
                   <ul className="k-list" aria-label={`Aussi en ${lead.name}`}>
-                    {lead.articles.slice(4).map(a => <li key={a.url}><Story a={a} size="xs" lede={false} /></li>)}
+                    {lead.articles.slice(4).map(a => <li key={a.url}><Story ask={ask} a={a} size="xs" lede={false} /></li>)}
                   </ul>
                 )}
                 <button className="k-btn" onClick={() => ask(`Que disent les articles récents sur le thème ${lead.name} ?`)}>
@@ -166,7 +176,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                   <ol className="k-wire">
                     {today.latest.slice(0, 8).map(a => (
                       <li key={a.url}>
-                        <a href={a.url} target="_blank" rel="noreferrer">
+                        <a href="#/assistant" onClick={explain(ask, a)}>
                           <time>{clock(a.time) || '—'}</time>
                           <span>{a.title}<span className="k-src">{sourceLabel(a.source)}</span></span>
                         </a>
@@ -191,9 +201,9 @@ export default function Une({ ask, session, corpus, health, reports }) {
                     <h2 id={`sec-${anchor(t.name)}`}>{t.name}</h2>
                     <span className="k-muted">{t.count} article{t.count > 1 ? 's' : ''}</span>
                   </header>
-                  <Story a={t.articles[0]} size="m" />
+                  <Story ask={ask} a={t.articles[0]} size="m" />
                   <ul className="k-list">
-                    {t.articles.slice(1).map(a => <li key={a.url}><Story a={a} size="xs" lede={false} /></li>)}
+                    {t.articles.slice(1).map(a => <li key={a.url}><Story ask={ask} a={a} size="xs" lede={false} /></li>)}
                   </ul>
                   <button className="k-textlink" onClick={() => ask(`Que disent les articles récents sur le thème ${t.name} ?`)}>
                     Résumer avec l'assistant <ArrowRight size={14} />
@@ -208,7 +218,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                   </header>
                   <ul className="k-list">
                     {brief.slice(0, 10).map(a => (
-                      <li key={a.url}><span className="k-label k-brief-theme">{a.theme}</span><Story a={a} size="xs" lede={false} /></li>
+                      <li key={a.url}><span className="k-label k-brief-theme">{a.theme}</span><Story ask={ask} a={a} size="xs" lede={false} /></li>
                     ))}
                   </ul>
                 </section>
