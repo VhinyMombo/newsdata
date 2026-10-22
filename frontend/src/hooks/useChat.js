@@ -51,7 +51,8 @@ export function useChat({ setApiStatus }) {
     const prevQuestion = priorTurns.length ? priorTurns[priorTurns.length - 1].question : '';
 
     const idx = existingIdx ?? chatRef.current.length;
-    const fresh = { question: userQ, answer: '', sources: null, error: null, pinned };
+    // id: a new key per turn, so a new thread's first answer is animated afresh
+    const fresh = { id: Date.now(), question: userQ, answer: '', sources: null, error: null, pinned };
     setChatHistory(prev => (newThread ? [fresh] : existingIdx === null ? [...prev, fresh] : prev.map((t, i) => (i === idx ? fresh : t))));
     const patch = (p) => setChatHistory(prev => prev.map((t, i) => (i === idx ? { ...t, ...p } : t)));
 

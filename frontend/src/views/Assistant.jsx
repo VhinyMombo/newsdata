@@ -52,8 +52,42 @@ function Composer({ chat, inputRef, compact }) {
   );
 }
 
+// A hosted model can deliver a whole answer in a second, in a few large chunks:
+// reveal it at a steady pace instead, word by word, about 45 characters a second,
+// faster when far behind so a long answer never trails by more than a few seconds.
+// Answers restored from an earlier visit, and reduced-motion readers, get it at once.
+function useSteadyText(text, live) {
+  const [n, setN] = useState(() => (live ? 0 : Infinity));
+  const textRef = useRef(text);
+  const liveRef = useRef(live);
+  useEffect(() => { textRef.current = text; liveRef.current = live; });
+  useEffect(() => {
+    if (n === Infinity) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setN(Infinity); return; }
+    let raf, last = performance.now(), pos = 0;
+    const tick = (now) => {
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      const len = textRef.current.length;
+      pos = Math.min(len, pos + Math.max(45, (len - pos) / 6) * dt);
+      setN(Math.floor(pos));
+      if (liveRef.current || pos < len) raf = requestAnimationFrame(tick);
+      else setN(Infinity);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (n >= text.length) return text;
+  // End on a word boundary so words appear whole
+  const cut = text.lastIndexOf(' ', n);
+  return text.slice(0, cut > 0 ? cut : n);
+}
+
 function Turn({ entry, idx, live, chat }) {
   const [copied, setCopied] = useState(false);
+  const shown = useSteadyText(entry.answer || '', live);
+  const writing = live || shown.length < (entry.answer || '').length;
   const copy = () => navigator.clipboard?.writeText(entry.answer).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); });
   return (
     <article className="k-turn">
@@ -65,11 +99,11 @@ function Turn({ entry, idx, live, chat }) {
         </div>
       ) : entry.answer ? (
         // aria-busy keeps screen readers quiet through the stream, then reads the answer once
-        <div className="k-answer" aria-live="polite" aria-atomic="true" aria-busy={live}>
-          {entry.fromCache && !live && <span className="k-tag" title="Question déjà posée récemment : réponse resservie sans regénération">Réponse instantanée</span>}
-          <AnswerText text={entry.answer} streaming={live} />
-          {!live && <SourceList sources={entry.sources} />}
-          {!live && (
+        <div className="k-answer" aria-live="polite" aria-atomic="true" aria-busy={writing}>
+          {entry.fromCache && !writing && <span className="k-tag" title="Question déjà posée récemment : réponse resservie sans regénération">Réponse instantanée</span>}
+          <AnswerText text={shown} streaming={writing} />
+          {!writing && <SourceList sources={entry.sources} />}
+          {!writing && (
             <div className="k-turn-actions">
               <button className="k-btn ghost" onClick={copy}>{copied ? 'Copié' : 'Copier la réponse'}</button>
             </div>
@@ -224,7 +258,7 @@ export default function Assistant({ chat, compare, sub }) {
         <>
           <div className="k-thread" role="log" aria-label="Conversation" ref={threadRef}>
             {chatHistory.map((entry, idx) => (
-              <Turn key={idx} entry={entry} idx={idx} chat={chat} live={idx === chatHistory.length - 1 && searching} />
+              <Turn key={entry.id ?? idx} entry={entry} idx={idx} chat={chat} live={idx === chatHistory.length - 1 && searching} />
             ))}
           </div>
           <div className="k-dock">
