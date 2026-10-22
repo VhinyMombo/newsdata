@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, GitCompare, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowUp, GitCompare, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, SquarePen } from 'lucide-react';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 
@@ -211,8 +211,14 @@ export default function Assistant({ chat, compare, sub }) {
   };
   const hasSources = corpus === 'presse' && chatHistory.at(-1)?.sources?.length > 0;
 
+  const newConversation = () => { chat.clear(); inputRef.current?.focus(); };
+  // Once a conversation runs, the controls move from the top of the page to the
+  // dock above the composer: a long thread no longer means scrolling back up
+  const inThread = mode !== 'comparer' && !empty;
+
   return (
     <div className="k-wrap k-page k-assistant">
+      {!inThread && (<>
       <header className="k-page-head">
         <span className="k-eyebrow">Assistant</span>
         <h1 className="k-title">{mode === 'comparer' ? 'Comparer deux périodes' : corpus === 'codes' ? 'Que dit la loi gabonaise ?' : 'Que voulez-vous savoir ?'}</h1>
@@ -229,13 +235,8 @@ export default function Assistant({ chat, compare, sub }) {
             );
           })}
         </div>
-        {mode !== 'comparer' && !empty && (
-          <div className="k-bar-actions">
-            {hasSources && <a className="k-btn ghost" href="#/tendances/carte"><MapIcon size={14} /> Voir sur la carte</a>}
-            <button className="k-btn ghost" onClick={() => { chat.clear(); inputRef.current?.focus(); }}><Trash2 size={14} /> Nouvelle conversation</button>
-          </div>
-        )}
       </div>
+      </>)}
 
       {mode === 'comparer' ? <Compare compare={compare} /> : empty ? (
         <div className="k-hero">
@@ -262,6 +263,22 @@ export default function Assistant({ chat, compare, sub }) {
             ))}
           </div>
           <div className="k-dock">
+            <div className="k-dock-tools">
+              <div className="k-dock-modes" role="tablist" aria-label="Où chercher">
+                {MODES.map((m) => {
+                  const [k, l, Icon] = m;
+                  return (
+                    <button key={k} role="tab" aria-selected={mode === k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>
+                      <Icon size={14} strokeWidth={1.8} aria-hidden="true" />{l}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="k-dock-actions">
+                {hasSources && <a className="k-icon-btn" href="#/tendances/carte" aria-label="Voir sur la carte"><MapIcon size={15} /><span>Carte</span></a>}
+                <button className="k-icon-btn" onClick={newConversation} aria-label="Nouvelle conversation"><SquarePen size={15} /><span>Nouvelle</span></button>
+              </div>
+            </div>
             <Composer chat={chat} inputRef={inputRef} compact />
             <p className="k-disclaimer">
               <span className="long">Réponses rédigées par IA à partir des articles cités. Elles peuvent contenir des erreurs : vérifiez toujours les sources.</span>
