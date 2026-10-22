@@ -108,6 +108,9 @@ while true; do
     elif grep -qiE "TooManyRequests|429" <<<"$out"; then
       log "Essai $attempt : trop de requêtes, pause plus longue"
       sleep 300
+    elif grep -qiE "timed out|ConnectionError|RequestException" <<<"$out"; then
+      # Wi-Fi drop or the Mac waking up: try again next round
+      log "Essai $attempt : réseau indisponible, nouvel essai"
     else
       log "Erreur inattendue, arrêt :"
       echo "$out"
