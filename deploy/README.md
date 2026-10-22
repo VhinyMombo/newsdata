@@ -115,5 +115,5 @@ Tout se règle dans `.env.docker`, puis `$DC up -d api` :
 |---|---|
 | Groq seul | `LLM_PROVIDER=groq`, `GROQ_API_KEY=…` |
 | Gemini, Groq en secours | ajouter `LLM_FALLBACK_PROVIDER=groq` et `GROQ_API_KEY=…` |
-| Gemini plus léger, quota souvent plus large | `LLM_MODEL=gemini-2.5-flash-lite` |
+| Gemini plus léger, quota souvent plus large | `LLM_MODEL=gemini-flash-lite-latest`, `LLM_REASONING_EFFORT=minimal` |
 | Revenir au modèle local | `LLM_PROVIDER=ollama` (lent sur processeur seul) |

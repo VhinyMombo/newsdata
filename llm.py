@@ -17,7 +17,7 @@ import os
 PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
 
 _HOSTED = {
-    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-2.5-flash"),
+    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-3.8-flash"),
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "qwen/qwen3-32b"),
 }
 
