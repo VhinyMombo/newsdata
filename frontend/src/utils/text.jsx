@@ -2,8 +2,14 @@ import { useState, useEffect } from 'react';
 import { sourceLabel } from './format';
 
 // ── Lightweight markdown rendering (bold + bullet lists) ───────────────────
+// French typography: "16 000" and "15 %" must never break across lines, so the
+// space inside a number, and before %, becomes a narrow no-break space
+const keepNumbersWhole = (str) => str
+  .replace(/(?<![\d.,])\d{1,3}(?:[ \u00a0]\d{3})+(?![\d])/g, (n) => n.replace(/[ \u00a0]/g, '\u202f'))
+  .replace(/(\d)[ \u00a0]%/g, '$1\u202f%');
+
 function formatInline(str) {
-  const parts = str.split(/\*\*(.+?)\*\*/g);
+  const parts = keepNumbersWhole(str).split(/\*\*(.+?)\*\*/g);
   return parts.map((p, i) => (i % 2 ? <strong key={i}>{p}</strong> : p));
 }
 
