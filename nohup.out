@@ -1,0 +1,10 @@
+INFO:     Started server process [61349]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+Loading ChromaDB from /Users/vhinymombo/Desktop/learning/rag/newspaper_chroma_db...
+  ✅ 2887 articles ready  |  LLM: llama3
+Loading ChromaDB from /Users/vhinymombo/Desktop/learning/rag/newspaper_chroma_db...
+  ✅ 2887 articles ready  |  LLM: llama3

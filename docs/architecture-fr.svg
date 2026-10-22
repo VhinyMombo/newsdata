@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path fill="#166f43" d="M0,0 L8,4 L0,8 z"/>
+    </marker>
+  </defs>
+  <rect width="960" height="600" fill="#ffffff"/>
+
+  <!-- Row 1: sources -->
+  <g>
+    <rect x="65" y="24" width="390" height="52" rx="10" fill="#ffffff" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="260" y="45" text-anchor="middle" font-size="15" font-weight="bold" fill="#1c241f">Sites de presse</text>
+    <text x="260" y="63" text-anchor="middle" font-size="12.5" fill="#6e7a72">13 sources</text>
+
+    <rect x="605" y="24" width="270" height="52" rx="10" fill="#ffffff" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="740" y="45" text-anchor="middle" font-size="15" font-weight="bold" fill="#1c241f">Journal Officiel</text>
+    <text x="740" y="63" text-anchor="middle" font-size="12.5" fill="#6e7a72">7 codes de loi</text>
+  </g>
+
+  <line x1="260" y1="76" x2="260" y2="126" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="274" y="106" font-size="12" font-style="italic" fill="#6e7a72">scraping quotidien parallèle</text>
+  <line x1="740" y1="76" x2="740" y2="126" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="754" y="106" font-size="12" font-style="italic" fill="#6e7a72">scraping ad hoc</text>
+
+  <!-- Row 2: staging -->
+  <g>
+    <rect x="65" y="128" width="390" height="52" rx="10" fill="#ffffff" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="260" y="149" text-anchor="middle" font-size="15" font-weight="bold" fill="#1c241f">Google Sheets</text>
+    <text x="260" y="167" text-anchor="middle" font-size="12.5" fill="#6e7a72">dépôt central · dédoublonné par URL</text>
+
+    <rect x="605" y="128" width="270" height="52" rx="10" fill="#ffffff" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="740" y="159" text-anchor="middle" font-size="15" font-weight="bold" fill="#1c241f">CSV locaux</text>
+  </g>
+
+  <line x1="260" y1="180" x2="260" y2="230" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="274" y="210" font-size="12" font-style="italic" fill="#6e7a72">indexation incrémentale</text>
+  <line x1="740" y1="180" x2="740" y2="230" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+
+  <!-- Row 3: vector stores -->
+  <g>
+    <rect x="65" y="232" width="390" height="56" rx="10" fill="#eef4f0" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="260" y="255" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#1c241f" font-family="Menlo, monospace">newspaper_chroma_db</text>
+    <text x="260" y="274" text-anchor="middle" font-size="12.5" fill="#6e7a72">19 228 entrées · embeddinggemma (Ollama)</text>
+
+    <rect x="605" y="232" width="270" height="56" rx="10" fill="#eef4f0" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="740" y="255" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#1c241f" font-family="Menlo, monospace">codes_chroma_db</text>
+    <text x="740" y="274" text-anchor="middle" font-size="12.5" fill="#6e7a72">1 502 entrées · même embedding</text>
+  </g>
+
+  <!-- Converge into the API -->
+  <path d="M260,288 L260,320 L740,320 L740,288" fill="none" stroke="#166f43" stroke-width="1.8"/>
+  <line x1="500" y1="320" x2="500" y2="344" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+
+  <!-- API -->
+  <g>
+    <rect x="280" y="348" width="440" height="118" rx="12" fill="#0e5432"/>
+    <text x="500" y="376" text-anchor="middle" font-size="16" font-weight="bold" fill="#ffffff">API FastAPI</text>
+    <text x="500" y="396" text-anchor="middle" font-size="13" fill="#d9e8df" font-family="Menlo, monospace">/search · /answer · /health</text>
+    <text x="310" y="419" font-size="12.5" fill="#d9e8df">• RAG temporel (corpus presse)</text>
+    <text x="310" y="437" font-size="12.5" fill="#d9e8df">• prompts spécialisés par corpus</text>
+    <text x="310" y="455" font-size="12.5" fill="#d9e8df">• génération : qwen3.5:9b (Ollama), streaming</text>
+  </g>
+
+  <!-- Fan out -->
+  <path d="M500,466 L500,492 M300,492 L700,492" fill="none" stroke="#166f43" stroke-width="1.8"/>
+  <line x1="300" y1="492" x2="300" y2="514" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+  <line x1="700" y1="492" x2="700" y2="514" stroke="#166f43" stroke-width="1.8" marker-end="url(#arr)"/>
+
+  <!-- Row 5: consumers -->
+  <g>
+    <rect x="140" y="516" width="320" height="56" rx="10" fill="#ffffff" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="300" y="539" text-anchor="middle" font-size="15" font-weight="bold" fill="#1c241f">Frontend React</text>
+    <text x="300" y="558" text-anchor="middle" font-size="12.5" fill="#6e7a72">assistant · carte 2D/3D · statistiques</text>
+
+    <rect x="530" y="516" width="340" height="56" rx="10" fill="#ffffff" stroke="#a7c6b4" stroke-width="1.5"/>
+    <text x="700" y="539" text-anchor="middle" font-size="15" font-weight="bold" fill="#1c241f">Export hors ligne</text>
+    <text x="700" y="558" text-anchor="middle" font-size="12.5" fill="#6e7a72">UMAP/PCA + HDBSCAN + thèmes LLM</text>
+  </g>
+</svg>

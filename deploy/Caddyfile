@@ -1,0 +1,13 @@
+# Le Kiosque — public entrypoint. Caddy fetches and renews the certificate.
+
+{$KIOSQUE_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy web:80 {
+		# /answer and the reports stream token by token
+		flush_interval -1
+		# api.py trusts cf-connecting-ip first for rate limiting; there is no
+		# Cloudflare in front here, so a visitor must not be able to set it
+		header_up -Cf-Connecting-Ip
+	}
+}

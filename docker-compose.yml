@@ -1,0 +1,122 @@
+# Le Kiosque — full stack.
+#
+#   docker compose up -d                     API + frontend (Ollama on the host)
+#   docker compose --profile ollama up -d    ...plus a containerised Ollama
+#   docker compose --profile pipeline run --rm pipeline 3   scrape last 3 days
+#
+# Copy .env.docker.example to .env.docker and fill it in before the first run.
+
+x-app-env: &app-env
+  # Every knob api.py reads is an env var (see its os.getenv block) — the
+  # defaults below match the code's own defaults, so an empty .env still boots.
+  OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+  OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-embeddinggemma}
+  OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3.5:9b}
+  OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+  AUTH_DB_PATH: /data/auth.db
+  REPORTS_DB_PATH: /data/reports_archive.db
+  TZ: ${TZ:-Africa/Libreville}
+
+services:
+  # ------------------------------------------------------------------ API ---
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lekiosque-api:latest
+    restart: unless-stopped
+    env_file:
+      # Existing secrets (VAPID_*, TAVILY_API_KEY) come straight from .env;
+      # .env.docker holds the container-only overrides and wins on conflict.
+      - path: .env
+        required: false
+      - path: .env.docker
+        required: false
+    environment: *app-env
+    ports:
+      # Host-only by default: the frontend container reaches the API over the
+      # compose network, so nothing needs to be published to the outside.
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    volumes:
+      # Vector stores stay on the host — 485 MB + 18 MB, rebuilt by the
+      # pipeline, never something to bake into an image layer.
+      - ./newspaper_chroma_db:/app/newspaper_chroma_db
+      - ./codes_chroma_db:/app/codes_chroma_db
+      # SQLite state (accounts, sessions, report archive) survives rebuilds.
+      - kiosque-data:/data
+    extra_hosts:
+      # Lets host.docker.internal resolve on Linux too, where Docker Desktop's
+      # automatic alias doesn't exist.
+      - "host.docker.internal:host-gateway"
+
+  # ------------------------------------------------------------- frontend ---
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Same-origin: nginx proxies /api/* to the api service, so no CORS.
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    image: lekiosque-web:latest
+    restart: unless-stopped
+    ports:
+      - "${WEB_HOST_PORT:-8080}:80"
+    volumes:
+      # The embedding export the map view fetches at startup. Mounted rather
+      # than built in, so `export_embeddings.py` output is live immediately.
+      - ./frontend/public/data.json:/usr/share/nginx/html/data.json:ro
+    depends_on:
+      - api
+
+  # ------------------------------------------------------------- pipeline ---
+  # One-shot: scrape the sources, rebuild ChromaDB, re-export embeddings.
+  # Same image as the API — identical dependency set.
+  #   docker compose --profile pipeline run --rm pipeline 7
+  pipeline:
+    profiles: ["pipeline"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lekiosque-api:latest
+    env_file:
+      # Existing secrets (VAPID_*, TAVILY_API_KEY) come straight from .env;
+      # .env.docker holds the container-only overrides and wins on conflict.
+      - path: .env
+        required: false
+      - path: .env.docker
+        required: false
+    environment:
+      <<: *app-env
+      # update_newspaper.sh defaults to the host's .venv; point it at the
+      # interpreter that actually exists in this image.
+      PYTHON: /opt/venv/bin/python
+    entrypoint: ["/usr/bin/tini", "--", "/app/scripts/update_newspaper.sh"]
+    command: ["3"]
+    volumes:
+      - ./newspaper_chroma_db:/app/newspaper_chroma_db
+      - ./codes_chroma_db:/app/codes_chroma_db
+      - ./data:/app/data
+      # Google Sheets service account — read-only, never in the image.
+      - ./credentials.json:/app/credentials.json:ro
+      # export_embeddings.py writes here; the web container serves the result.
+      - ./frontend/public:/app/frontend/public
+      - kiosque-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # --------------------------------------------------------------- Ollama ---
+  # Optional. On macOS the host install is much faster (containers get no GPU),
+  # which is why this sits behind a profile instead of running by default.
+  # To use it, set OLLAMA_HOST=http://ollama:11434 in .env.docker.
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  kiosque-data:
+  ollama-models:

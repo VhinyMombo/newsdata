@@ -17,13 +17,13 @@ import argparse
 import csv
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
 
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent  # scripts/newspaper_pipeline/ → scripts/ → rag/
 DATA_DIR = ROOT_DIR / "Newspaperdata"
 
 BASE_URL = "https://www.gabonreview.com"
@@ -228,17 +228,14 @@ def main() -> None:
         print("⚠️  No articles found for this period.")
         return
 
-    # Sort by date descending
     all_articles.sort(key=lambda r: r["published_time"], reverse=True)
 
-    csv_path = DATA_DIR / f"gabonreview_{date_min}_to_{date_max}.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(all_articles)
-
     print(f"{'='*60}")
-    print(f"✅ Saved {len(all_articles)} unique articles to {csv_path}")
+    print(f"📤 Uploading {len(all_articles)} articles to Google Sheets...")
+    from sheets_client import SheetsClient
+    client = SheetsClient()
+    written = client.append_articles("gabonreview", all_articles, FIELDNAMES)
+    print(f"✅ Done — {written} new rows added to 'gabonreview' tab")
 
 
 if __name__ == "__main__":
