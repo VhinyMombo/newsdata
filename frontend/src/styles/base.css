@@ -282,6 +282,8 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 
 .k-thread { display: grid; }
 .k-turn { padding: 32px 0; border-bottom: 1px solid var(--rule); }
+/* Room for the latest question to reach the top of the screen as soon as it is sent */
+.k-thread > .k-turn:last-child { min-height: calc(100svh - var(--nav-h) - var(--tabbar-h, 0px) - 140px); }
 .k-question { font-size: clamp(1.45rem, 2.6vw, 1.9rem); line-height: 1.22; margin-bottom: 16px; }
 .k-answer { max-width: var(--read); }
 .k-turn-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 14px; margin-left: -10px; }
@@ -295,6 +297,7 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-send:disabled { opacity: 0.35; }
 .k-send.stop { background: var(--clay); }
 .k-disclaimer { margin-top: 8px; text-align: center; font-size: 0.74rem; color: var(--muted); }
+.k-disclaimer .short { display: none; }
 
 .k-compare { padding-top: 24px; display: grid; gap: 20px; }
 .k-compare-form { display: grid; gap: 14px; justify-items: start; max-width: var(--read); }
@@ -380,6 +383,14 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
   .k-account { padding: 3px; border: none; }
   .k-account-login { width: 38px; justify-content: center; border: 1px solid var(--rule-strong); }
   .k-brand-name { font-size: 1.2rem; }
+  /* Phone: a slimmer dock leaves more of the screen to the answer */
+  .k-dock { padding: 10px 0 6px; }
+  .k-dock .k-composer { padding: 4px 4px 4px 14px; }
+  .k-dock .k-composer textarea { padding: 7px 0; }
+  .k-dock .k-send { width: 40px; height: 40px; }
+  .k-disclaimer { margin-top: 5px; font-size: 0.68rem; }
+  .k-disclaimer .long { display: none; }
+  .k-disclaimer .short { display: inline; }
 
   .k-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset: auto 0 0 0; z-index: 60; height: var(--tabbar-h); padding-bottom: env(safe-area-inset-bottom); background: color-mix(in srgb, var(--white) 94%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }
   .k-tabbar a { display: grid; justify-items: center; align-content: center; gap: 3px; font-size: 0.68rem; color: var(--muted); text-decoration: none; }

@@ -36,7 +36,7 @@ function Composer({ chat, inputRef, compact }) {
       <label htmlFor="k-q" className="sr-only">{corpus === 'codes' ? 'Poser une question sur les codes de loi gabonais' : "Poser une question sur l'actualité gabonaise"}</label>
       <textarea
         id="k-q" ref={inputRef} rows={1} value={q}
-        placeholder={corpus === 'codes' ? 'Une question sur la loi gabonaise…' : 'Une question sur l’actualité gabonaise…'}
+        placeholder={compact ? 'Une autre question…' : corpus === 'codes' ? 'Une question sur la loi gabonaise…' : 'Une question sur l’actualité gabonaise…'}
         onChange={e => setQ(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) submit(e); }}
         disabled={searching}
@@ -158,13 +158,17 @@ function Compare({ compare }) {
 export default function Assistant({ chat, compare, sub }) {
   const mode = sub === 'comparer' ? 'comparer' : chat.corpus;
   const inputRef = useRef(null);
-  const endRef = useRef(null);
+  const threadRef = useRef(null);
   const { chatHistory, searching, corpus } = chat;
   const empty = chatHistory.length === 0 && !searching;
 
+  // A new question goes to the top of the screen once; the answer then grows
+  // below it without moving the page. Following every streamed chunk made the
+  // text jump on phones and pulled the reader back down mid-sentence.
+  const turns = chatHistory.length;
   useEffect(() => {
-    if (chatHistory.length) endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [chatHistory]);
+    if (turns) threadRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [turns]);
 
   const setMode = (m) => {
     if (m === 'comparer') { go('assistant/comparer'); return; }
@@ -218,15 +222,17 @@ export default function Assistant({ chat, compare, sub }) {
         </div>
       ) : (
         <>
-          <div className="k-thread" role="log" aria-label="Conversation">
+          <div className="k-thread" role="log" aria-label="Conversation" ref={threadRef}>
             {chatHistory.map((entry, idx) => (
               <Turn key={idx} entry={entry} idx={idx} chat={chat} live={idx === chatHistory.length - 1 && searching} />
             ))}
-            <div ref={endRef} />
           </div>
           <div className="k-dock">
             <Composer chat={chat} inputRef={inputRef} compact />
-            <p className="k-disclaimer">Réponses rédigées par IA à partir des articles cités. Elles peuvent contenir des erreurs : vérifiez toujours les sources.</p>
+            <p className="k-disclaimer">
+              <span className="long">Réponses rédigées par IA à partir des articles cités. Elles peuvent contenir des erreurs : vérifiez toujours les sources.</span>
+              <span className="short">Rédigé par IA : vérifiez toujours les sources.</span>
+            </p>
           </div>
         </>
       )}
