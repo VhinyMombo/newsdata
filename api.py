@@ -55,6 +55,8 @@ RECENCY_WEIGHT         = float(os.getenv("RECENCY_WEIGHT",         "0.4"))
 RECENCY_HALF_LIFE_DAYS = float(os.getenv("RECENCY_HALF_LIFE_DAYS", "2.0"))
 # Candidates fetched inside a time window before ranking
 TEMPORAL_FETCH_K       = int(os.getenv("TEMPORAL_FETCH_K", "100"))
+# In a time window, candidates within this cosine distance of the best match rank first
+WINDOW_RELEVANCE_MARGIN = float(os.getenv("WINDOW_RELEVANCE_MARGIN", "0.2"))
 # Non-temporal queries get a mild recency nudge too: on evolving topics
 # (dette, nominations…) an older in-depth article often embeds closer than
 # yesterday's update, so pure similarity feeds the LLM stale figures.
@@ -1053,7 +1055,23 @@ def search(request: Request, req: SearchRequest):
         combined = [
             (m, d, doc) for m, d, doc in combined if d < 3.0
         ]
-        combined = temporal_rank(combined, now_ts=time.time())
+        ranked = temporal_rank(combined, now_ts=time.time())
+        # Inside a window, recency alone let any article of the last day beat
+        # an on-topic one from earlier that week ("la SEEG cette semaine"
+        # returned none on the SEEG). Rank first those close to the best match;
+        # a generic question matches everything about equally, so it keeps its
+        # plain recency order. The rest only fills up to n_results.
+        if ranked:
+            best = min(d for _, d, _ in ranked)
+            # Among the close ones, relevance leads and recency (over the
+            # week, not two days) breaks near-ties
+            close = temporal_rank(
+                [x for x in ranked if x[1] <= best + WINDOW_RELEVANCE_MARGIN],
+                now_ts=time.time(), sim_weight=0.85, rec_weight=0.15, half_life_days=7.0,
+            )
+            combined = close + [x for x in ranked if x[1] > best + WINDOW_RELEVANCE_MARGIN]
+        else:
+            combined = ranked
     else:
         combined = [
             (m, d, doc) for m, d, doc in combined if d < RELEVANCE_THRESHOLD
