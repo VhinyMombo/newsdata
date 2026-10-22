@@ -19,11 +19,12 @@ import os
 import tempfile
 from io import BytesIO
 
-INK = "#1c241f"
-MUTED = "#6e7a72"
-ACCENT = "#166f43"
-ACCENT_SOFT = "#a7c6b4"
-GRID = "#e7e5db"
+# Hodologic palette: ink, slate, the Kiosque bordeaux
+INK = "#0F2A3A"
+MUTED = "#5B6B7A"
+ACCENT = "#7A1F2B"
+ACCENT_SOFT = "#D8B4B9"
+GRID = "#E7E3DD"
 
 FONT = "Helvetica"
 

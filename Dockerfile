@@ -83,6 +83,7 @@ RUN useradd --create-home --uid 10001 kiosque \
 COPY --chown=kiosque:kiosque api.py auth.py llm.py report_archive.py report_pdf.py \
      lekiosque_theme.py push_notify.py ./
 COPY --chown=kiosque:kiosque scripts/ ./scripts/
+COPY --chown=kiosque:kiosque assets/report/ ./assets/report/
 
 USER kiosque
 
