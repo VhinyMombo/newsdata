@@ -8,19 +8,25 @@ const keepNumbersWhole = (str) => str
   .replace(/(?<![\d.,])\d{1,3}(?:[ \u00a0]\d{3})+(?![\d])/g, (n) => n.replace(/[ \u00a0]/g, '\u202f'))
   .replace(/(\d)[ \u00a0]%/g, '$1\u202f%');
 
-// [n] in an answer cites the n-th source: a small number that opens the article
+// [n] in an answer cites the n-th source: a small number that opens the article.
+// A run of them ("Gabon [1][2][3]."), with the punctuation after it, stays on one
+// line and against the word before: badges and a lone full stop wrapped badly.
 function withCitations(str, sources, key) {
   if (!sources?.length) return str;
-  return str.split(/(\[\d{1,2}\])/g).map((p, i) => {
-    const n = p.match(/^\[(\d{1,2})\]$/)?.[1];
-    const src = n && sources[n - 1];
-    if (!src) return p;
-    return (
-      <sup key={`${key}-${i}`} className="k-cite">
-        <a href={src.url} target="_blank" rel="noreferrer" title={`${sourceLabel(src.source)} : ${src.title}`}
-          aria-label={`Source ${n} : ${src.title}`}>{n}</a>
-      </sup>
-    );
+  return str.split(/\s*((?:\[\d{1,2}\])+[.,;:!?»)]*)/g).map((p, i) => {
+    if (i % 2 === 0) return p;
+    const [, refs, punct] = p.match(/^((?:\[\d{1,2}\])+)(.*)$/);
+    const badges = [...refs.matchAll(/\[(\d{1,2})\]/g)].map(([, n], j) => {
+      const src = sources[n - 1];
+      if (!src) return null;
+      return (
+        <sup key={j} className="k-cite">
+          <a href={src.url} target="_blank" rel="noreferrer" title={`${sourceLabel(src.source)} : ${src.title}`}
+            aria-label={`Source ${n} : ${src.title}`}>{n}</a>
+        </sup>
+      );
+    });
+    return <span key={`${key}-${i}`} className="k-cites">{badges}{punct}</span>;
   });
 }
 
