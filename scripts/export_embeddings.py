@@ -8,6 +8,8 @@ Usage:
 """
 
 import json
+import re
+import time
 from pathlib import Path
 
 import os
@@ -28,6 +30,92 @@ COLLECTION_NAME = "newspaper_gabon"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 FRONTEND_PUBLIC = FRONTEND_DIR / "public"
 OUTPUT_FILE = FRONTEND_PUBLIC / "data.json"
+
+
+GROUP_SIZE = 20
+NAMING_PAUSE = float(os.getenv("LLM_NAMING_PAUSE", "13"))
+
+
+def name_one(namer, c_id, titles, cluster_names) -> None:
+    """One cluster, one call: the local model's path."""
+    titles_text = "\n".join(f"- {t}" for t in titles)
+    prompt = (
+        "Tu es un expert en analyse de presse.\n"
+        "On te donne une liste de titres d’articles d’actualité gabonaise regroupés automatiquement.\n"
+        "Ta tâche est d’identifier le thème principal commun à ces titres.\n\n"
+
+        "Règles :\n"
+        "- Réponds par un seul nom de catégorie.\n"
+        "- Maximum 1 à 4 mots.\n"
+        "- La catégorie doit être claire, concise et explicite.\n"
+        "- N'ajoute aucune explication.\n"
+        "- N'écris rien d'autre que le nom de la catégorie.\n\n"
+
+        "Exemples de catégories possibles :\n"
+        "Politique, Économie, Faits Divers, Éducation, Santé, Justice, Société, Diplomatie.\n\n"
+
+        "Titres :\n"
+        f"{titles_text}\n\n"
+
+        "Catégorie :"
+    )
+    try:
+        msg = [SystemMessage(content="Tu es un journaliste synthétique."), HumanMessage(content=prompt)]
+        name = namer.invoke(msg).content.strip().replace('"', '').replace("'", "")
+        cluster_names[c_id] = name
+        print(f"  Cluster {c_id} -> {name}")
+    except Exception as e:
+        print(f"  Error naming cluster {c_id}: {e}")
+        cluster_names[c_id] = f"Cluster {c_id}"
+
+
+def name_in_groups(namer, clusters, sample_titles, cluster_names) -> None:
+    """Twenty clusters per call, asking for specific names that don't repeat."""
+    for start in range(0, len(clusters), GROUP_SIZE):
+        group = clusters[start:start + GROUP_SIZE]
+        blocks = "\n\n".join(
+            f"Groupe {c_id} :\n" + "\n".join(f"- {t}" for t in sample_titles(c_id, 15))
+            for c_id in group)
+        taken = sorted({n for c, n in cluster_names.items() if c != -1})
+        prompt = (
+            "Voici des groupes de titres d’articles de la presse gabonaise, "
+            "regroupés automatiquement par sujet.\n\n"
+            "Pour chaque groupe, donne un nom de thème de 2 à 6 mots, le plus précis possible : "
+            "nomme l’affaire, l’événement, la personne, l’institution, le secteur ou le lieu qui "
+            "rassemble les titres, plutôt qu’une rubrique générale comme « Économie », « Justice » "
+            "ou « Sport ». Deux groupes ne doivent jamais porter le même nom.\n"
+            + (f"Noms déjà attribués, à ne pas réutiliser : {', '.join(taken)}.\n" if taken else "")
+            + "\nRéponds uniquement par un objet JSON qui associe le numéro de chaque groupe à son nom, "
+            'par exemple {"12": "Procès de la Satram"}.\n\n'
+            + blocks
+        )
+        names = {}
+        for attempt in range(4):
+            try:
+                reply = namer.invoke([HumanMessage(content=prompt)]).content
+                names = json.loads(re.search(r"\{.*\}", reply, re.S).group(0))
+                break
+            except Exception as e:
+                # 429: quota for the minute; 503: the model is overloaded
+                busy = any(code in str(e) for code in ("429", "RESOURCE_EXHAUSTED", "503"))
+                print(f"  Groups {group[0]}–{group[-1]}, attempt {attempt + 1}: {str(e)[:120]}")
+                time.sleep(65 if busy else NAMING_PAUSE)
+        missed = []
+        for c_id in group:
+            name = str(names.get(str(c_id), "")).strip().strip('"').strip()
+            if name:
+                cluster_names[c_id] = name
+                print(f"  Cluster {c_id} -> {name}")
+            else:
+                missed.append(c_id)
+        if missed:
+            # The hosted model gave up on these: the batch model (the local
+            # one, usually) names them one by one rather than leave "Cluster N"
+            print(f"  {len(missed)} clusters left to the batch model")
+            fallback = llm.chat_model(temperature=0.2, batch=True)
+            for c_id in missed:
+                name_one(fallback, c_id, sample_titles(c_id, 40), cluster_names)
+        time.sleep(NAMING_PAUSE)
 
 
 def main() -> None:
@@ -88,49 +176,25 @@ def main() -> None:
     cluster_names = {}
     
 
-    print(f"Generating cluster names with {llm.BATCH_PROVIDER or llm.PROVIDER}/{llm.BATCH_MODEL or llm.MODEL}...")
-    namer = llm.chat_model(temperature=0.2, batch=True)
-    
-    for c_id in unique_clusters:
-        if c_id == -1:
-            cluster_names[c_id] = "Divers / Non-classé"
-            continue
-            
-        # Get up to 40 random titles from this cluster to prompt the LLM
+    provider = llm.NAMING_PROVIDER or llm.BATCH_PROVIDER or llm.PROVIDER
+    model = llm.NAMING_MODEL or llm.BATCH_MODEL or llm.MODEL
+    print(f"Generating cluster names with {provider}/{model}...")
+    namer = llm.naming_model(temperature=0.2)
+    cluster_names[-1] = "Divers / Non-classé"
+    named = [c for c in sorted(unique_clusters) if c != -1]
+
+    def sample_titles(c_id, k):
         indices = np.where(cluster_labels == c_id)[0]
-        sample_indices = np.random.choice(indices, min(40, len(indices)), replace=False)
-        sample_titles = [data["metadatas"][idx].get("title", "") for idx in sample_indices]
-        titles_text = "\n".join(f"- {t}" for t in sample_titles if t)
-        
-        prompt = (
-            "Tu es un expert en analyse de presse.\n"
-            "On te donne une liste de titres d’articles d’actualité gabonaise regroupés automatiquement.\n"
-            "Ta tâche est d’identifier le thème principal commun à ces titres.\n\n"
+        picked = np.random.choice(indices, min(k, len(indices)), replace=False)
+        return [t for t in (data["metadatas"][i].get("title", "") for i in picked) if t]
 
-            "Règles :\n"
-            "- Réponds par un seul nom de catégorie.\n"
-            "- Maximum 1 à 4 mots.\n"
-            "- La catégorie doit être claire, concise et explicite.\n"
-            "- N'ajoute aucune explication.\n"
-            "- N'écris rien d'autre que le nom de la catégorie.\n\n"
-
-            "Exemples de catégories possibles :\n"
-            "Politique, Économie, Faits Divers, Éducation, Santé, Justice, Société, Diplomatie.\n\n"
-
-            "Titres :\n"
-            f"{titles_text}\n\n"
-
-            "Catégorie :"
-        )
-        
-        try:
-            msg = [SystemMessage(content="Tu es un journaliste synthétique."), HumanMessage(content=prompt)]
-            name = namer.invoke(msg).content.strip().replace('"', '').replace("'", "")
-            cluster_names[c_id] = name
-            print(f"  Cluster {c_id} ({len(indices)} articles) -> {name}")
-        except Exception as e:
-            print(f"  Error naming cluster {c_id}: {e}")
-            cluster_names[c_id] = f"Cluster {c_id}"
+    if provider != "ollama":
+        # A hosted free tier allows a few requests a minute: name the
+        # clusters twenty at a time, and pace the requests
+        name_in_groups(namer, named, sample_titles, cluster_names)
+    else:
+        for c_id in named:
+            name_one(namer, c_id, sample_titles(c_id, 40), cluster_names)
 
     # ---------------------------------------------------------
     # Assemble JSON Payload

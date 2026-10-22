@@ -10,7 +10,10 @@ LLM_MODEL overrides the provider's default model. LLM_FALLBACK_PROVIDER
 fails, typically a free-tier quota running out. LLM_BATCH_PROVIDER (with
 LLM_BATCH_MODEL) moves the pipeline's bulk calls, a couple of hundred map
 clusters to name per run, onto another backend, usually the local model, so
-they don't burn the free quota the assistant needs. Embeddings are not
+they don't burn the free quota the assistant needs. LLM_NAMING_PROVIDER (with
+LLM_NAMING_MODEL and LLM_NAMING_REASONING_EFFORT) does the same for the map's
+cluster names alone, which go out in a handful of grouped requests and so can
+use a hosted model whose quota is separate from the assistant's. Embeddings are not
 covered here: they stay on Ollama (embeddinggemma) whatever the provider,
 because the stored vectors were built with it.
 """
@@ -44,6 +47,8 @@ FALLBACK_MODEL = (_model_for(FALLBACK_PROVIDER, os.getenv("LLM_FALLBACK_MODEL"))
                   if FALLBACK_PROVIDER else None)
 BATCH_PROVIDER = os.getenv("LLM_BATCH_PROVIDER", "").lower() or None
 BATCH_MODEL = _model_for(BATCH_PROVIDER, os.getenv("LLM_BATCH_MODEL")) if BATCH_PROVIDER else None
+NAMING_PROVIDER = os.getenv("LLM_NAMING_PROVIDER", "").lower() or None
+NAMING_MODEL = _model_for(NAMING_PROVIDER, os.getenv("LLM_NAMING_MODEL")) if NAMING_PROVIDER else None
 
 
 def chat_model(temperature: float, num_ctx: int | None = None, max_tokens: int | None = None,
@@ -53,15 +58,27 @@ def chat_model(temperature: float, num_ctx: int | None = None, max_tokens: int |
     batch=True is for the pipeline's bulk jobs: LLM_BATCH_PROVIDER when set.
     """
     if batch and BATCH_PROVIDER:
-        return _build(BATCH_PROVIDER, BATCH_MODEL, temperature, num_ctx, max_tokens)
-    primary = _build(PROVIDER, MODEL, temperature, num_ctx, max_tokens)
+        return _build(BATCH_PROVIDER, BATCH_MODEL, temperature, num_ctx, max_tokens,
+                      os.getenv("LLM_BATCH_REASONING_EFFORT"))
+    primary = _build(PROVIDER, MODEL, temperature, num_ctx, max_tokens,
+                     os.getenv("LLM_REASONING_EFFORT"))
     if not FALLBACK_PROVIDER:
         return primary
     return primary.with_fallbacks(
-        [_build(FALLBACK_PROVIDER, FALLBACK_MODEL, temperature, num_ctx, max_tokens)])
+        [_build(FALLBACK_PROVIDER, FALLBACK_MODEL, temperature, num_ctx, max_tokens,
+                os.getenv("LLM_FALLBACK_REASONING_EFFORT"))])
 
 
-def _build(provider, model, temperature, num_ctx, max_tokens):
+def naming_model(temperature: float):
+    """The model that names the map's clusters: LLM_NAMING_PROVIDER when set,
+    else the batch one. Retries are left to the caller, which paces its calls."""
+    if not NAMING_PROVIDER:
+        return chat_model(temperature, batch=True)
+    return _build(NAMING_PROVIDER, NAMING_MODEL, temperature, None, None,
+                  os.getenv("LLM_NAMING_REASONING_EFFORT"), retries=0)
+
+
+def _build(provider, model, temperature, num_ctx, max_tokens, effort, retries=None):
     if provider == "ollama":
         from langchain_ollama.chat_models import ChatOllama
         return ChatOllama(
@@ -78,15 +95,16 @@ def _build(provider, model, temperature, num_ctx, max_tokens):
     api_key = os.getenv(key_var)
     if not api_key:
         raise RuntimeError(f"Le fournisseur {provider} demande la variable {key_var}")
-    # "none" turns Gemini 2.5 Flash's and Qwen3's thinking off; leave it unset
-    # for models that reject the parameter (Llama on Groq)
-    effort = os.getenv("LLM_REASONING_EFFORT" if provider == PROVIDER else "LLM_FALLBACK_REASONING_EFFORT")
+    # effort: "none" turns Gemini Flash's and Qwen3's thinking off; leave it
+    # unset for models that reject the parameter (Llama on Groq)
+    if retries is None:
+        retries = 0 if FALLBACK_PROVIDER and provider == PROVIDER else 2
     return ChatOpenAI(
         model=model,
         base_url=base_url,
         api_key=api_key,
         temperature=temperature,
-        max_retries=0 if FALLBACK_PROVIDER and provider == PROVIDER else 2,
+        max_retries=retries,
         timeout=120,
         **({"max_tokens": max_tokens} if max_tokens else {}),
         **({"reasoning_effort": effort} if effort else {}),
