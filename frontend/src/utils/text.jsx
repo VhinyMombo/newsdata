@@ -8,17 +8,35 @@ const keepNumbersWhole = (str) => str
   .replace(/(?<![\d.,])\d{1,3}(?:[ \u00a0]\d{3})+(?![\d])/g, (n) => n.replace(/[ \u00a0]/g, '\u202f'))
   .replace(/(\d)[ \u00a0]%/g, '$1\u202f%');
 
-function formatInline(str) {
-  const parts = keepNumbersWhole(str).split(/\*\*(.+?)\*\*/g);
-  return parts.map((p, i) => (i % 2 ? <strong key={i}>{p}</strong> : p));
+// [n] in an answer cites the n-th source: a small number that opens the article
+function withCitations(str, sources, key) {
+  if (!sources?.length) return str;
+  return str.split(/(\[\d{1,2}\])/g).map((p, i) => {
+    const n = p.match(/^\[(\d{1,2})\]$/)?.[1];
+    const src = n && sources[n - 1];
+    if (!src) return p;
+    return (
+      <sup key={`${key}-${i}`} className="k-cite">
+        <a href={src.url} target="_blank" rel="noreferrer" title={`${sourceLabel(src.source)} : ${src.title}`}
+          aria-label={`Source ${n} : ${src.title}`}>{n}</a>
+      </sup>
+    );
+  });
 }
 
-export function AnswerText({ text, streaming }) {
+function formatInline(str, sources) {
+  const parts = keepNumbersWhole(str).split(/\*\*(.+?)\*\*/g);
+  return parts.flatMap((p, i) => (i % 2 ? [<strong key={i}>{withCitations(p, sources, i)}</strong>] : [].concat(withCitations(p, sources, i))));
+}
+
+export function AnswerText({ text, streaming, sources }) {
   if (streaming) {
     // Mid-stream, an opened **bold** has no closing marker yet: close it virtually
     if ((text.split('**').length - 1) % 2 === 1) text += '**';
     // A bare list marker on the last line would flash as a stray character
     text = text.replace(/\n[ \t]*[-•*][ \t]*$/, '');
+    // Nor a citation still being written ("[", "[1")
+    text = text.replace(/\[\d{0,2}$/, '');
   }
   const blocks = [];
   let list = null;
@@ -37,9 +55,9 @@ export function AnswerText({ text, streaming }) {
   return (
     <div className="k-prose">
       {blocks.map((b, i) =>
-        b.type === 'ul' ? <ul key={i}>{b.items.map((it, j) => <li key={j}>{formatInline(it)}</li>)}</ul>
-          : b.type === 'h' ? <h4 key={i}>{formatInline(b.text)}</h4>
-            : <p key={i}>{formatInline(b.text)}</p>
+        b.type === 'ul' ? <ul key={i}>{b.items.map((it, j) => <li key={j}>{formatInline(it, sources)}</li>)}</ul>
+          : b.type === 'h' ? <h4 key={i}>{formatInline(b.text, sources)}</h4>
+            : <p key={i}>{formatInline(b.text, sources)}</p>
       )}
       {streaming && <span className="k-cursor" />}
     </div>

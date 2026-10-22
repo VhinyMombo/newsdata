@@ -181,6 +181,10 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-prose li::marker { color: var(--green); }
 .k-prose strong { font-weight: 600; }
 
+/* Inline citation: a small number in the answer that opens its source */
+.k-cite { line-height: 0; }
+.k-cite a { display: inline-block; min-width: 1.45em; margin-left: 2px; padding: 0.15em 0.35em; border-radius: 4px; background: var(--green-soft); color: var(--green); font: 600 0.7rem/1.2 var(--sans); text-align: center; text-decoration: none; vertical-align: 0.35em; }
+.k-cite a:hover { background: var(--green); color: var(--on-green); }
 .k-sources { margin-top: 26px; padding: 18px 20px; background: var(--bg-alt); border-radius: 10px; }
 .k-provenance { font-size: 0.82rem; color: var(--muted); margin-bottom: 12px; }
 .k-provenance.single { color: var(--sand-ink); }

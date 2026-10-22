@@ -101,7 +101,7 @@ function Turn({ entry, idx, live, chat }) {
         // aria-busy keeps screen readers quiet through the stream, then reads the answer once
         <div className="k-answer" aria-live="polite" aria-atomic="true" aria-busy={writing}>
           {entry.fromCache && !writing && <span className="k-tag" title="Question déjà posée récemment : réponse resservie sans regénération">Réponse instantanée</span>}
-          <AnswerText text={shown} streaming={writing} />
+          <AnswerText text={shown} streaming={writing} sources={entry.sources} />
           {!writing && <SourceList sources={entry.sources} />}
           {!writing && (
             <div className="k-turn-actions">
@@ -176,7 +176,7 @@ function Compare({ compare }) {
                   : col.empty ? <p className="k-muted">Aucun article sur ce sujet pour cette période.</p>
                     : col.answer ? (
                       <div aria-live="polite" aria-atomic="true" aria-busy={col.loading}>
-                        <AnswerText text={col.answer} streaming={col.loading} />
+                        <AnswerText text={col.answer} streaming={col.loading} sources={col.sources} />
                         {!col.loading && <SourceList sources={col.sources} />}
                       </div>
                     ) : null}

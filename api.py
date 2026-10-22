@@ -333,7 +333,10 @@ Rédaction :
 - Donne une réponse détaillée, structurée et informative en français.
 - Utilise des paragraphes et des listes à puces si approprié.
 - Mentionne les dates clés des événements.
-- Ne mentionne pas les numéros des articles (ils sont affichés séparément).
+- Cite tes sources dans le texte : après chaque information, indique entre crochets le \
+numéro de l'article d'où elle vient, par exemple [1], ou [2][3] si plusieurs articles la \
+donnent. N'utilise que les numéros des articles fournis. Le lecteur touche ces numéros \
+pour ouvrir l'article.
 """
 
 
@@ -383,8 +386,9 @@ def build_rag_prompt(question: str, articles: list["ContextArticle"]) -> str:
     context_blocks = []
     for i, art in enumerate(articles, 1):
         full_text = art.full_text or art.snippet
+        # Numbered as in the reader's source list, even if an article went missing
         block = (
-            f"[Article {i}]\n"
+            f"[Article {art.ref or i}]\n"
             f"Titre : {art.title}\n"
             f"Date  : {art.date}\n"
             f"Source: {art.source}\n\n"
@@ -416,7 +420,9 @@ def build_rag_prompt(question: str, articles: list["ContextArticle"]) -> str:
         "STYLE :\n"
         "- Réponse journalistique claire, factuelle et structurée.\n"
         "- 4 à 8 phrases.\n"
-        "- Ne mentionne pas les numéros d'articles.\n\n"
+        "- Après chaque information, cite entre crochets le numéro de l'article d'où elle vient, "
+        "par exemple [1] ou [2][3]. Uniquement les numéros des articles fournis, "
+        "sans écrire « Article » ni le titre.\n\n"
 
         f"=== ARTICLES ===\n{context}\n=== FIN ARTICLES ===\n\n"
         f"Rappel de la question : {question}\n"
@@ -463,6 +469,8 @@ class ContextArticle(BaseModel):
     source: str = ""
     snippet: str = ""
     full_text: str = ""
+    # Position in the reader's source list, which the answer cites as [n]
+    ref: int = 0
 
 
 class ChatTurn(BaseModel):
@@ -502,7 +510,7 @@ def _fetch_articles(urls: list[str]) -> list[ContextArticle]:
         )
 
     articles: list[ContextArticle] = []
-    for url in urls:  # preserve the caller's (relevance/date) ordering
+    for ref, url in enumerate(urls, 1):  # preserve the caller's (relevance/date) ordering
         chunks = by_url.get(url)
         if not chunks:
             logger.warning(f"/answer: no document found for {url}")
@@ -521,6 +529,7 @@ def _fetch_articles(urls: list[str]) -> list[ContextArticle]:
             date      = meta.get("published_time", "")[:10],
             source    = meta.get("source", ""),
             full_text = "\n\n".join(parts),
+            ref       = ref,
         ))
     return articles
 
