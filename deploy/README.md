@@ -91,6 +91,8 @@ $DC exec ollama ollama pull embeddinggemma
 # Comptes et archive des comptes rendus, copiés une fois dans le volume
 docker cp auth.db "$($DC ps -q api)":/data/auth.db
 docker cp reports_archive.db "$($DC ps -q api)":/data/reports_archive.db
+# docker cp keeps the Mac's owner: hand the files to the container user (uid 10001)
+$DC exec -u root api chown -R 10001:10001 /data
 $DC restart api
 crontab deploy/crontab
 ```
