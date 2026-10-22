@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_URL, errorDetail, postJSON, readStream } from '../utils/api';
-import { acquire, release } from '../utils/lock';
+import { acquire, isBusy, release } from '../utils/lock';
 
 const CHAT_STORAGE_KEY = 'lekiosque_chat';
 // Past turns sent to the LLM for follow-up understanding
@@ -31,9 +31,16 @@ export function useChat({ setApiStatus }) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // pinned: an article the reader clicked; it leads the sources whatever the search finds
-  const runSearch = useCallback(async (userQ, existingIdx = null, corpusOverride = null, pinned = null) => {
+  // pinned: an article the reader clicked; it leads the sources whatever the search finds.
+  // newThread: start a conversation of its own (each clicked article), so an earlier
+  // article is neither shown above nor sent to the model as context.
+  const runSearch = useCallback(async (userQ, existingIdx = null, corpusOverride = null, pinned = null, newThread = false) => {
+    if (newThread && abortRef.current) {
+      abortRef.current.abort();
+      for (let i = 0; i < 40 && isBusy(); i++) await new Promise(r => setTimeout(r, 50));
+    }
     if (!acquire()) return;
+    if (newThread) chatRef.current = [];
     const c = corpusOverride || corpus;
     if (existingIdx !== null) pinned = pinned || chatRef.current[existingIdx]?.pinned || null;
     setSearching(true);
@@ -45,7 +52,7 @@ export function useChat({ setApiStatus }) {
 
     const idx = existingIdx ?? chatRef.current.length;
     const fresh = { question: userQ, answer: '', sources: null, error: null, pinned };
-    setChatHistory(prev => (existingIdx === null ? [...prev, fresh] : prev.map((t, i) => (i === idx ? fresh : t))));
+    setChatHistory(prev => (newThread ? [fresh] : existingIdx === null ? [...prev, fresh] : prev.map((t, i) => (i === idx ? fresh : t))));
     const patch = (p) => setChatHistory(prev => prev.map((t, i) => (i === idx ? { ...t, ...p } : t)));
 
     let answer = '';

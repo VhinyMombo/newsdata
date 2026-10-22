@@ -27,12 +27,13 @@ export default function App() {
   const codes = useCodes();
   const corpus = useCorpusData();
 
-  // Any view can hand a question to the assistant, in either corpus
+  // Any view can hand a question to the assistant, in either corpus. A clicked
+  // article (pinned) opens a conversation of its own.
   const { switchCorpus, runSearch } = chat;
   const ask = useCallback((q, target = 'presse', pinned = null) => {
     switchCorpus(target);
     go('assistant');
-    runSearch(q, null, target, pinned);
+    runSearch(q, null, target, pinned, !!pinned);
   }, [switchCorpus, runSearch]);
 
   const view = ['une', 'assistant', 'editions', 'tendances', 'codes'].includes(route.view) ? route.view : 'une';
