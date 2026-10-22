@@ -1,11 +1,12 @@
 # Le Kiosque — server schedule (install with: crontab deploy/crontab).
 # Times are the server's local time: set it to Africa/Libreville first.
 # A scrape every two hours from 8:00 to 22:00,
-# the daily brief at 20:30, the weekly review on Friday at 18:00.
+# the daily brief at 20:30, the weekly review on Friday at 18:00. A scrape
+# still running (a long catch-up) makes the next one skip rather than overlap.
 
 KIOSQUE=/home/ubuntu/lekiosque
 DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --profile ollama"
 
-0 8-22/2 * * * cd $KIOSQUE && $DC run --rm pipeline 1 >> logs/pipeline_scheduled.log 2>&1
+0 8-22/2 * * * cd $KIOSQUE && flock -n /tmp/lekiosque-pipeline.lock $DC run --rm pipeline 1 >> logs/pipeline_scheduled.log 2>&1
 30 20 * * * cd $KIOSQUE && $DC run --rm --entrypoint python pipeline scripts/generate_scheduled_report.py >> logs/scheduled_report.log 2>&1
 0 18 * * 5 cd $KIOSQUE && $DC run --rm --entrypoint python pipeline scripts/generate_scheduled_report.py --weekly >> logs/scheduled_report.log 2>&1
