@@ -2,14 +2,15 @@
 
 Un serveur Oracle Cloud « Always Free » fait tout tourner : l'API, la recherche
 (embeddinggemma dans Ollama), la base ChromaDB, les collectes et les comptes
-rendus programmés. Les réponses de l'assistant sont rédigées par une API
-gratuite (Gemini, Groq en secours). Caddy sert le site en HTTPS sur
+rendus programmés. Les réponses de l'assistant sont rédigées par l'offre
+gratuite de Gemini (Flash Lite), avec un petit modèle Qwen local en secours.
+Caddy sert le site en HTTPS sur
 `lekiosque.hodologic.fr` avec un certificat Let's Encrypt renouvelé seul.
 
 ```
 visiteur ──443──▶ Caddy ──▶ nginx (site + /api) ──▶ FastAPI ──▶ Ollama (embeddings)
                                                       │
-                                                      └──▶ Gemini / Groq (réponses)
+                                                      └──▶ Gemini Flash Lite (réponses, Qwen local en secours)
 cron ──▶ pipeline (collectes, ChromaDB, data.json, comptes rendus)
 ```
 
@@ -73,10 +74,30 @@ le volume Docker à l'étape suivante.
 Sur le serveur, créez `.env.docker` à partir de `.env.docker.example` :
 
 ```bash
+# Assistant : Gemini Flash Lite, réponse complète en 1 à 2 s
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=…
-LLM_REASONING_EFFORT=none
+LLM_MODEL=gemini-flash-lite-latest
+LLM_REASONING_EFFORT=minimal
+# Secours quand Gemini refuse : Qwen dans le conteneur Ollama (45 à 75 s sur processeur)
+LLM_FALLBACK_PROVIDER=ollama
+LLM_FALLBACK_MODEL=qwen3:1.7b
+# Tâches de masse du pipeline sur le modèle local
+LLM_BATCH_PROVIDER=ollama
+LLM_BATCH_MODEL=qwen3:1.7b
+# Noms des thèmes de la carte : par lots de vingt sur Flash Lite
+LLM_NAMING_PROVIDER=gemini
+LLM_NAMING_MODEL=gemini-flash-lite-latest
+LLM_NAMING_REASONING_EFFORT=minimal
 ```
+
+Ne prenez pas `gemini-3.8-flash` (le modèle par défaut de `llm.py`) pour
+l'assistant sur l'offre gratuite : Google le limite à 20 requêtes par jour
+pour tout le projet (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`),
+puis chaque question bascule sur Qwen. Flash Lite a un quota plus large, mais
+partagé entre l'assistant et le nommage des thèmes (une vingtaine de requêtes
+par collecte). Flash Lite refuse `LLM_REASONING_EFFORT=none` : utilisez
+`minimal`.
 
 ## 4. Démarrer
 
@@ -88,6 +109,7 @@ sudo chmod -R g+rwX newspaper_chroma_db codes_chroma_db data frontend/public
 DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --profile ollama"
 $DC up -d --build
 $DC exec ollama ollama pull embeddinggemma
+$DC exec ollama ollama pull qwen3:1.7b   # modèle de secours
 # Comptes et archive des comptes rendus, copiés une fois dans le volume
 docker cp auth.db "$($DC ps -q api)":/data/auth.db
 docker cp reports_archive.db "$($DC ps -q api)":/data/reports_archive.db
@@ -120,5 +142,6 @@ Tout se règle dans `.env.docker`, puis `$DC up -d api` :
 |---|---|
 | Groq seul | `LLM_PROVIDER=groq`, `GROQ_API_KEY=…` |
 | Gemini, Groq en secours | ajouter `LLM_FALLBACK_PROVIDER=groq` et `GROQ_API_KEY=…` |
-| Gemini plus léger, quota souvent plus large | `LLM_MODEL=gemini-flash-lite-latest`, `LLM_REASONING_EFFORT=minimal` |
-| Revenir au modèle local | `LLM_PROVIDER=ollama` (lent sur processeur seul) |
+| Gemini Flash Lite (réglage actuel) | `LLM_MODEL=gemini-flash-lite-latest`, `LLM_REASONING_EFFORT=minimal` |
+| Gemini Flash, plus fouillé | `LLM_MODEL=gemini-3.8-flash`, `LLM_REASONING_EFFORT=none` : 20 requêtes par jour en gratuit, à réserver à une clé avec facturation |
+| Revenir au modèle local | `LLM_PROVIDER=ollama` : 45 à 75 s par réponse avec qwen3:1.7b sur 2 processeurs, plusieurs minutes avec qwen3.5:9b |
