@@ -437,18 +437,16 @@ def _register_fonts() -> None:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 
-    for name in ("Poppins-Regular", "Poppins-Medium", "Poppins-SemiBold", "Poppins-Italic",
-                 "Poppins-SemiBoldItalic", "PlayfairDisplay-Regular", "PlayfairDisplay-Italic"):
+    for name in ("Poppins-Regular", "Poppins-Medium", "Poppins-SemiBold",
+                 "PlayfairDisplay-Regular"):
         pdfmetrics.registerFont(TTFont(name, os.path.join(ASSETS, f"{name}.ttf")))
-    # <b> and <i> inside body paragraphs
-    addMapping("Poppins-Regular", 0, 0, "Poppins-Regular")
-    addMapping("Poppins-Regular", 1, 0, "Poppins-SemiBold")
-    addMapping("Poppins-Regular", 0, 1, "Poppins-Italic")
-    addMapping("Poppins-Regular", 1, 1, "Poppins-SemiBoldItalic")
-    # Playfair is shipped in regular and italic only: bold falls back to regular
-    for bold in (0, 1):
-        addMapping("PlayfairDisplay-Regular", bold, 0, "PlayfairDisplay-Regular")
-        addMapping("PlayfairDisplay-Regular", bold, 1, "PlayfairDisplay-Italic")
+    # <b> inside body paragraphs; no italics anywhere, so <i> stays upright
+    for italic in (0, 1):
+        addMapping("Poppins-Regular", 0, italic, "Poppins-Regular")
+        addMapping("Poppins-Regular", 1, italic, "Poppins-SemiBold")
+        # Playfair is shipped in regular only: bold falls back to regular
+        for bold in (0, 1):
+            addMapping("PlayfairDisplay-Regular", bold, italic, "PlayfairDisplay-Regular")
     _fonts_done = True
 
 
@@ -546,13 +544,13 @@ def build_weekly_pdf(text: str, start: datetime, now: datetime, n_articles: int,
                               spaceAfter=1.4 * mm))
     styles.add(ParagraphStyle("kintro", parent=styles["kbody"], spaceBefore=4 * mm,
                               spaceAfter=3 * mm))
-    styles.add(ParagraphStyle("kcaption", fontName="Poppins-Italic", fontSize=8, leading=12,
+    styles.add(ParagraphStyle("kcaption", fontName="Poppins-Regular", fontSize=8, leading=12,
                               textColor=colors.HexColor(MUTED), spaceBefore=2 * mm,
                               spaceAfter=3 * mm))
     styles.add(ParagraphStyle("kref", **body_font, fontSize=8.8, leading=13,
                               leftIndent=6 * mm, bulletIndent=0, bulletFontName="Poppins-SemiBold",
                               bulletColor=colors.HexColor(ACCENT), spaceAfter=2 * mm))
-    styles.add(ParagraphStyle("kdek", fontName="PlayfairDisplay-Italic", fontSize=12,
+    styles.add(ParagraphStyle("kdek", fontName="PlayfairDisplay-Regular", fontSize=12,
                               leading=18, textColor=colors.HexColor("#34495A")))
     styles.add(ParagraphStyle("ktitle", fontName="PlayfairDisplay-Regular", fontSize=34,
                               leading=36, textColor=colors.HexColor(INK)))
