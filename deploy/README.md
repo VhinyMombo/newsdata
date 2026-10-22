@@ -82,6 +82,9 @@ LLM_REASONING_EFFORT=none
 
 ```bash
 cd ~/lekiosque && mkdir -p logs
+# The containers run as uid 10001: give them the data folders, keep group write for ubuntu
+sudo chown -R 10001:1000 newspaper_chroma_db codes_chroma_db data frontend/public
+sudo chmod -R g+rwX newspaper_chroma_db codes_chroma_db data frontend/public
 DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --profile ollama"
 $DC up -d --build
 $DC exec ollama ollama pull embeddinggemma
