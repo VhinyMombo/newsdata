@@ -34,7 +34,7 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         background_color: '#F4F6F4',
-        theme_color: '#2E554B',
+        theme_color: '#7A1F2B',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
