@@ -203,6 +203,11 @@ _MONTH_RE = re.compile(
 )
 
 _TODAY_WORDS = ["aujourd'hui", "aujourdhui", "du jour", "ce matin", "ce soir", "en ce moment"]
+# "Que retenir de la journée ?" means today, but "la journée nationale du
+# retraité" is an event: only a bare "de la journée" / "cette journée" counts
+_TODAY_RE = re.compile(
+    r"\b(?:de la|cette) journée\b(?!\s+(?:nationale|mondiale|internationale|africaine|de |du |des |d'|d’))"
+)
 _WEEK_WORDS = [
     "cette semaine", "ces derniers jours", "derniers jours", "récent", "recent",
     "récemment", "recemment", "dernière", "derniers", "actualité", "actualite",
@@ -242,7 +247,7 @@ def parse_time_window(question: str) -> tuple[float, float] | None:
     if "hier" in q:
         return gabon_timestamp(today - timedelta(days=1)), gabon_timestamp(now)
 
-    if any(w in q for w in _TODAY_WORDS):
+    if any(w in q for w in _TODAY_WORDS) or _TODAY_RE.search(q):
         # Anchor to the newest article so "les nouvelles du jour" still
         # returns yesterday's coverage when today's scrape hasn't run yet.
         anchor = today
@@ -312,12 +317,30 @@ def temporal_rank(
     return sorted(items, key=score, reverse=True)
 
 
+def _date_fr(d: date) -> str:
+    months = list(MONTHS_FR)  # insertion order: janvier … décembre, with accentless twins
+    names = [m for m in months if m not in ("fevrier", "aout", "decembre")]
+    return f"{d.day} {names[d.month - 1]} {d.year}"
+
+
 def get_rag_system() -> str:
-    today = gabon_today().strftime("%d %B %Y")
+    today = gabon_today()
+    latest = _latest_article_date()
+    # Before the first collection of the day, the newest articles are from the
+    # day before: the model must date them, not call them "today"
+    latest_line = ""
+    if latest:
+        try:
+            latest_d = date.fromisoformat(latest)
+            if latest_d < today:
+                latest_line = (f"Les articles les plus récents du corpus datent du {_date_fr(latest_d)} : "
+                               "la collecte du jour n'a pas encore eu lieu.\n")
+        except ValueError:
+            pass
     return f"""\
 Tu es l'assistant IA du Kiosque, une plateforme d'actualités du Gabon.
-Aujourd'hui, nous sommes le {today}.
-
+Aujourd'hui, nous sommes le {_date_fr(today)}.
+{latest_line}
 Règles impératives :
 - Tu reçois des extraits d'articles de presse. Réponds au sujet exact de la question \
 (la bonne personne, le bon lieu, le bon événement) à partir de leur contenu.
@@ -327,6 +350,9 @@ Règles impératives :
 puis résume ce que les articles disent de plus proche du sujet. Ne détourne jamais \
 la question vers un autre sujet pour donner l'impression de répondre.
 - Si les articles couvrent des dates différentes, donne la chronologie des événements.
+- Si la question porte sur aujourd'hui ou la journée et que les articles datent d'un jour \
+précédent, ne les présente jamais comme ceux d'aujourd'hui : annonce leur date réelle, par \
+exemple « Le 22 octobre, dernière journée couverte, … ».
 - Combine les informations de tous les articles.
 - Si la question fait suite à un échange précédent, interprète-la dans le contexte \
 de la conversation, mais fonde ta réponse sur les articles fournis.
