@@ -7,7 +7,10 @@ LLM_PROVIDER picks the backend:
 
 LLM_MODEL overrides the provider's default model. LLM_FALLBACK_PROVIDER
 (with LLM_FALLBACK_MODEL) names a second backend tried when the first one
-fails, typically a free-tier quota running out. Embeddings are not
+fails, typically a free-tier quota running out. LLM_BATCH_PROVIDER (with
+LLM_BATCH_MODEL) moves the pipeline's bulk calls, a couple of hundred map
+clusters to name per run, onto another backend, usually the local model, so
+they don't burn the free quota the assistant needs. Embeddings are not
 covered here: they stay on Ollama (embeddinggemma) whatever the provider,
 because the stored vectors were built with it.
 """
@@ -39,10 +42,18 @@ MODEL = _model_for(PROVIDER, os.getenv("LLM_MODEL"))
 FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "").lower() or None
 FALLBACK_MODEL = (_model_for(FALLBACK_PROVIDER, os.getenv("LLM_FALLBACK_MODEL"))
                   if FALLBACK_PROVIDER else None)
+BATCH_PROVIDER = os.getenv("LLM_BATCH_PROVIDER", "").lower() or None
+BATCH_MODEL = _model_for(BATCH_PROVIDER, os.getenv("LLM_BATCH_MODEL")) if BATCH_PROVIDER else None
 
 
-def chat_model(temperature: float, num_ctx: int | None = None, max_tokens: int | None = None):
-    """A LangChain chat model for the configured provider, with its fallback if any."""
+def chat_model(temperature: float, num_ctx: int | None = None, max_tokens: int | None = None,
+               batch: bool = False):
+    """A LangChain chat model for the configured provider, with its fallback if any.
+
+    batch=True is for the pipeline's bulk jobs: LLM_BATCH_PROVIDER when set.
+    """
+    if batch and BATCH_PROVIDER:
+        return _build(BATCH_PROVIDER, BATCH_MODEL, temperature, num_ctx, max_tokens)
     primary = _build(PROVIDER, MODEL, temperature, num_ctx, max_tokens)
     if not FALLBACK_PROVIDER:
         return primary

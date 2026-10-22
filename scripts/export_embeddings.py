@@ -88,8 +88,8 @@ def main() -> None:
     cluster_names = {}
     
 
-    print(f"Generating cluster names with {llm.PROVIDER}/{llm.MODEL}...")
-    namer = llm.chat_model(temperature=0.2)
+    print(f"Generating cluster names with {llm.BATCH_PROVIDER or llm.PROVIDER}/{llm.BATCH_MODEL or llm.MODEL}...")
+    namer = llm.chat_model(temperature=0.2, batch=True)
     
     for c_id in unique_clusters:
         if c_id == -1:

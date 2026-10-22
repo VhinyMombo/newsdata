@@ -123,7 +123,7 @@ def main():
         todo = todo[:args.limit]
         print(f"(limité à {len(todo)} pour ce passage)")
 
-    classifier = llm.chat_model(temperature=0)
+    classifier = llm.chat_model(temperature=0, batch=True)
 
     assigned = Counter()
     skipped = 0
