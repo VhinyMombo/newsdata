@@ -81,13 +81,6 @@ export default function App() {
         )}
         {view === 'codes' && <Codes codes={codes} ask={ask} />}
       </main>
-      {/* In a conversation the page ends with the dock: no footer under it */}
-      {view !== 'assistant' && <footer className="k-footer">
-        <div className="k-wrap k-footer-row">
-          <p><strong>Le Kiosque</strong>, un projet <a href="https://hodologic.fr/fr/work/le-kiosque" target="_blank" rel="noreferrer">Hodologic</a>. Les articles appartiennent à leurs journaux : chaque lien renvoie à leur site.</p>
-          <p className="k-muted">Les réponses sont rédigées par une IA à partir des articles cités. Vérifiez toujours les sources.</p>
-        </div>
-      </footer>}
     </div>
   );
 }
