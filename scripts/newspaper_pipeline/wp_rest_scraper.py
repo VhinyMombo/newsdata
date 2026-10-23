@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import requests
 from bs4 import BeautifulSoup
@@ -71,6 +71,20 @@ def _html_to_text(html: str) -> str:
     return text or soup.get_text(" ", strip=True)
 
 
+LIBREVILLE = timezone(timedelta(hours=1))
+
+
+def _libreville_time(p: dict) -> str:
+    """The post's time in Libreville, with its offset. "date" is the site's own
+    clock, which several of these sites keep on Paris time; "date_gmt" is UTC."""
+    gmt = str(p.get("date_gmt") or "")
+    try:
+        utc = datetime.fromisoformat(gmt).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return str(p.get("date", ""))
+    return utc.astimezone(LIBREVILLE).isoformat()
+
+
 def scrape_posts(base_url: str, target_dates: set[str], cat_map: dict[int, str]) -> list[dict]:
     """Page through /wp/v2/posts (newest first) until dates fall out of range."""
     after_iso = f"{min(target_dates)}T00:00:00"
@@ -85,7 +99,7 @@ def scrape_posts(base_url: str, target_dates: set[str], cat_map: dict[int, str])
                 "page": page,
                 "orderby": "date",
                 "order": "desc",
-                "_fields": "id,link,title,date,content,categories",
+                "_fields": "id,link,title,date,date_gmt,content,categories",
             })
             # WP returns 400 (rest_post_invalid_page_number) past the last page
             if r.status_code != 200:
@@ -98,7 +112,7 @@ def scrape_posts(base_url: str, target_dates: set[str], cat_map: dict[int, str])
             break
 
         for p in posts:
-            pub_time = str(p.get("date", ""))
+            pub_time = _libreville_time(p)
             pub_date = pub_time[:10]
             if pub_date not in target_dates:
                 continue
