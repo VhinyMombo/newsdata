@@ -9,6 +9,7 @@ JWT isn't, without a blocklist that's just this table by another name.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import secrets
@@ -60,6 +61,18 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+CREATE TABLE IF NOT EXISTS conversations (
+    id         TEXT NOT NULL,
+    user_id    INTEGER NOT NULL,
+    corpus     TEXT NOT NULL CHECK (corpus IN ('presse', 'codes')),
+    title      TEXT NOT NULL,
+    turns      TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_recent ON conversations(user_id, updated_at);
 """
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -258,3 +271,51 @@ def list_push_subscriptions_with_follows() -> list[dict]:
                 "follows": [dict(r) for r in follows],
             })
         return result
+
+
+# ── Assistant conversations (per user) ──────────────────────────────────────
+
+MAX_CONVERSATIONS = 100
+
+
+def list_conversations(user_id: int, limit: int = 30) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, corpus, title, json_array_length(turns) AS turns, updated_at "
+            "FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_conversation(user_id: int, conv_id: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT id, corpus, title, turns, updated_at FROM conversations WHERE user_id = ? AND id = ?",
+            (user_id, conv_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {**dict(row), "turns": json.loads(row["turns"])}
+
+
+def save_conversation(user_id: int, conv_id: str, corpus: str, turns: list[dict]) -> None:
+    """Create or replace a conversation; the oldest beyond MAX_CONVERSATIONS are dropped."""
+    title = turns[0]["question"].strip()[:120]
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO conversations (id, user_id, corpus, title, turns) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(user_id, id) DO UPDATE SET corpus = excluded.corpus, title = excluded.title, "
+            "turns = excluded.turns, updated_at = datetime('now')",
+            (conv_id, user_id, corpus, title, json.dumps(turns, ensure_ascii=False)),
+        )
+        conn.execute(
+            "DELETE FROM conversations WHERE user_id = ? AND id NOT IN "
+            "(SELECT id FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?)",
+            (user_id, user_id, MAX_CONVERSATIONS),
+        )
+
+
+def delete_conversation(user_id: int, conv_id: str) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM conversations WHERE user_id = ? AND id = ?", (user_id, conv_id))

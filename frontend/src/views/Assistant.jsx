@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, GitCompare, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, SquarePen } from 'lucide-react';
+import { AlertTriangle, ArrowUp, GitCompare, History, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
+import { API_URL } from '../utils/api';
 
 const SUGGESTIONS = {
   presse: [
@@ -118,6 +119,63 @@ function Turn({ entry, idx, live, chat }) {
   );
 }
 
+// "14:05" today, "22 oct." before: the server stores UTC
+function when(utc) {
+  const d = new Date(`${utc.replace(' ', 'T')}Z`);
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+// Without an account, a conversation is lost once another starts: say what signing up keeps
+function SaveHint({ openAuth }) {
+  return (
+    <p className="k-saved-hint">
+      <History size={15} aria-hidden="true" />
+      <span>Vos conversations disparaissent quand vous en commencez une autre. <button className="k-textlink" onClick={() => openAuth('register')}>Créez un compte</button> pour les retrouver sur tous vos appareils.</span>
+    </p>
+  );
+}
+
+// The signed-in reader's earlier conversations, to pick up again, above the suggestions
+function SavedConversations({ chat, session }) {
+  const { authToken } = session;
+  const [list, setList] = useState(null);
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    if (!authToken) return;
+    fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${authToken}` } })
+      .then(r => (r.ok ? r.json() : []))
+      .then(setList)
+      .catch(() => setList([]));
+  }, [authToken]);
+
+  if (!list?.length) return null;
+  const remove = (id) => {
+    setList(l => l.filter(c => c.id !== id));
+    fetch(`${API_URL}/conversations/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${authToken}` } }).catch(() => {});
+  };
+  const shown = all ? list : list.slice(0, 5);
+  return (
+    <section className="k-saved" aria-labelledby="k-saved-title">
+      <span className="k-label" id="k-saved-title">Vos conversations</span>
+      <ul>
+        {shown.map(c => (
+          <li key={c.id}>
+            <button className="k-saved-open" onClick={() => chat.openConversation(c.id)} disabled={chat.searching}>
+              {c.corpus === 'codes' ? <Scale size={15} aria-hidden="true" /> : <Newspaper size={15} aria-hidden="true" />}
+              <span className="k-saved-title">{c.title}</span>
+              <span className="k-saved-meta">{c.turns > 1 ? `${c.turns} questions · ` : ''}{when(c.updated_at)}</span>
+            </button>
+            <button className="k-saved-del" onClick={() => remove(c.id)} aria-label={`Supprimer la conversation « ${c.title} »`}><X size={15} /></button>
+          </li>
+        ))}
+      </ul>
+      {list.length > 5 && !all && <button className="k-textlink" onClick={() => setAll(true)}>Voir les {list.length} conversations</button>}
+    </section>
+  );
+}
+
 function Compare({ compare }) {
   const [topic, setTopic] = useState('');
   const { preset, setPreset, custom, setCustom, result, comparing, stopping, cooldown, run, stop, retryColumn } = compare;
@@ -189,7 +247,7 @@ function Compare({ compare }) {
   );
 }
 
-export default function Assistant({ chat, compare, sub }) {
+export default function Assistant({ chat, compare, sub, session }) {
   const mode = sub === 'comparer' ? 'comparer' : chat.corpus;
   const inputRef = useRef(null);
   const threadRef = useRef(null);
@@ -246,6 +304,7 @@ export default function Assistant({ chat, compare, sub }) {
               ? "La réponse cite les numéros d'articles exacts. Elle ne remplace pas un conseil juridique."
               : "La réponse est rédigée à partir de cinq articles au plus, cités en dessous pour que vous puissiez vérifier."}
           </p>
+          {session.user && <SavedConversations chat={chat} session={session} />}
           <div className="k-try">
             <span className="k-label">Essayez</span>
             <div className="k-try-grid">
@@ -254,6 +313,7 @@ export default function Assistant({ chat, compare, sub }) {
               ))}
             </div>
           </div>
+          {!session.user && <SaveHint openAuth={session.openAuth} />}
         </div>
       ) : (
         <>

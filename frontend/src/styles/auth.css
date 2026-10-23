@@ -243,3 +243,9 @@
 }
 .auth-logout:hover { background: rgba(168, 67, 58, 0.08); }
 
+
+/* What an account brings, above the sign-up fields */
+.auth-perks { list-style: none; display: grid; gap: 10px; margin: -6px 0 8px; padding: 14px 14px; border-radius: 10px; background: var(--tint, var(--panel-alt)); }
+.auth-perks li { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; font-size: 0.86rem; line-height: 1.45; color: var(--text-2); }
+.auth-perks svg { margin-top: 2px; color: var(--accent); }
+.auth-perks b { color: var(--text); font-weight: 600; }

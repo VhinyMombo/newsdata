@@ -4,11 +4,19 @@ import { API_URL, errorDetail, postJSON, readStream } from '../utils/api';
 import { acquire, isBusy, release } from '../utils/lock';
 
 const CHAT_STORAGE_KEY = 'lekiosque_chat';
+const THREAD_STORAGE_KEY = 'lekiosque_thread';
 // Past turns sent to the LLM for follow-up understanding
 const HISTORY_TURNS = 3;
 const HISTORY_ANSWER_CHARS = 1200;
 
-export function useChat({ setApiStatus }) {
+const newThreadId = () => `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+// What a saved conversation keeps of each cited article: long passages stay on the server
+const slimSource = (s) => Object.fromEntries(Object.entries(s).filter(([, v]) => typeof v !== 'string' || v.length <= 600));
+const savedTurns = (history) => history
+  .filter(t => t.answer && !t.error)
+  .map(t => ({ question: t.question, answer: t.answer, sources: (t.sources || []).slice(0, 10).map(slimSource) }));
+
+export function useChat({ setApiStatus, authToken }) {
   const [corpus, setCorpus] = useState('presse'); // 'presse' | 'codes'
   const [searching, setSearching] = useState(false);
   const [chatHistory, setChatHistory] = useState(() => {
@@ -19,6 +27,11 @@ export function useChat({ setApiStatus }) {
     } catch { return []; }
   }); // [{ question, answer, sources, error, fromCache }]
   const abortRef = useRef(null);
+  // Each conversation has an id: for a signed-in reader it is saved under it, and can be reopened
+  const [threadId, setThreadId] = useState(() => {
+    try { return localStorage.getItem(THREAD_STORAGE_KEY) || newThreadId(); } catch { return newThreadId(); }
+  });
+  const savedRef = useRef('');
 
   // Live view for runSearch: its closure would otherwise read stale streamed content
   const chatRef = useRef(chatHistory);
@@ -29,6 +42,23 @@ export function useChat({ setApiStatus }) {
     try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory.slice(-30))); }
     catch { /* storage full or unavailable: the chat just won't persist */ }
   }, [chatHistory, searching]);
+
+  useEffect(() => {
+    try { localStorage.setItem(THREAD_STORAGE_KEY, threadId); } catch { /* storage unavailable */ }
+  }, [threadId]);
+
+  // Signed in: once an answer is complete, the conversation is saved to the account
+  useEffect(() => {
+    if (searching || !authToken) return;
+    const turns = savedTurns(chatHistory);
+    if (!turns.length) return;
+    const body = JSON.stringify({ corpus, turns });
+    if (body === savedRef.current) return;
+    savedRef.current = body;
+    fetch(`${API_URL}/conversations/${threadId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` }, body,
+    }).catch(() => { savedRef.current = ''; });
+  }, [chatHistory, searching, authToken, threadId, corpus]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -41,7 +71,7 @@ export function useChat({ setApiStatus }) {
       for (let i = 0; i < 40 && isBusy(); i++) await new Promise(r => setTimeout(r, 50));
     }
     if (!acquire()) return;
-    if (newThread) chatRef.current = [];
+    if (newThread) { chatRef.current = []; setThreadId(newThreadId()); }
     const c = corpusOverride || corpus;
     track('question', { rubrique: c === 'codes' ? 'lois' : 'actualite', origine: pinned ? 'article' : existingIdx !== null ? 'relance' : 'saisie' });
     if (existingIdx !== null) pinned = pinned || chatRef.current[existingIdx]?.pinned || null;
@@ -102,8 +132,25 @@ export function useChat({ setApiStatus }) {
   const clear = useCallback(() => {
     abortRef.current?.abort();
     setChatHistory([]);
+    setThreadId(newThreadId());
     localStorage.removeItem(CHAT_STORAGE_KEY);
   }, []);
+
+  // Reopen a saved conversation where it was left; a question asked next continues it
+  const openConversation = useCallback(async (id) => {
+    // Opening generates nothing: only a chat answer still streaming stands in the way
+    if (!authToken || abortRef.current) return false;
+    const res = await fetch(`${API_URL}/conversations/${id}`, { headers: { Authorization: `Bearer ${authToken}` } }).catch(() => null);
+    if (!res?.ok) return false;
+    const conv = await res.json();
+    const turns = conv.turns.map((t, i) => ({ id: `${id}-${i}`, question: t.question, answer: t.answer, sources: t.sources, error: null }));
+    savedRef.current = JSON.stringify({ corpus: conv.corpus, turns: savedTurns(turns) });
+    setCorpus(conv.corpus);
+    setThreadId(conv.id);
+    chatRef.current = turns;
+    setChatHistory(turns);
+    return true;
+  }, [authToken]);
 
   // Switching corpus starts a fresh thread: mixed press and legal answers read ambiguously
   const switchCorpus = useCallback((next) => {
@@ -116,5 +163,5 @@ export function useChat({ setApiStatus }) {
     }
   }, [corpus, clear]);
 
-  return { corpus, switchCorpus, searching, chatHistory, runSearch, stop, clear };
+  return { corpus, switchCorpus, searching, chatHistory, runSearch, stop, clear, threadId, openConversation };
 }

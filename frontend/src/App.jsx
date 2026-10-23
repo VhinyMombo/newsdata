@@ -22,7 +22,7 @@ export default function App() {
   const route = useRoute();
   const session = useSession();
   const health = useHealth();
-  const chat = useChat({ setApiStatus: health.setApiStatus });
+  const chat = useChat({ setApiStatus: health.setApiStatus, authToken: session.authToken });
   const reports = useReports();
   const compare = useCompare({ gabonToday: health.gabonToday });
   const codes = useCodes();
@@ -61,7 +61,7 @@ export default function App() {
 
       <main className="k-main" id="contenu">
         {view === 'une' && <Une ask={ask} session={session} corpus={corpus} health={health} reports={reports} />}
-        {view === 'assistant' && <Assistant chat={chat} compare={compare} health={health} sub={route.sub} />}
+        {view === 'assistant' && <Assistant chat={chat} compare={compare} health={health} sub={route.sub} session={session} />}
         {view === 'editions' && <Editions reports={reports} sub={route.sub} />}
         {view === 'tendances' && (
           <Suspense fallback={<div className="k-page"><p className="k-muted">Chargement…</p></div>}>

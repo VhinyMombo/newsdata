@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import '../styles/auth.css';
 import {
-  X,
+  Bell, History, Star, X,
 } from 'lucide-react';
 import { API_URL } from '../utils/api';
 
@@ -153,6 +153,13 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
             }}
           >
             <h2 className="auth-title">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
+            {mode === 'register' && (
+              <ul className="auth-perks">
+                <li><History size={16} aria-hidden="true" /><span><b>Vos conversations gardées.</b> Reprenez-les plus tard, sur tous vos appareils.</span></li>
+                <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
+                <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
+              </ul>
+            )}
             {mode === 'register' && (
               <input
                 className="auth-input" placeholder="Nom affiché" value={displayName}

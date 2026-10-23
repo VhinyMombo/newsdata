@@ -1,10 +1,15 @@
-// "What's moving": this week's headlines against the eight weeks before.
-// Two lenses: the names that surge in titles (people, places, firms, acronyms) and the
-// topics (the map's clusters) that rise or fade.
+// "What's moving": this week's headlines against the eight weeks before, or the latest
+// day's against the four weeks of days before. Two lenses: the names that surge in titles
+// (people, places, firms, acronyms) and the topics (the map's clusters) that rise or fade.
 
-const WEEK = 7;
-const BASE_WEEKS = 8;
-const SPARK_WEEKS = 12;
+// One period of `days` against `base` periods before; `spark` periods drawn per topic.
+// A day holds a seventh of a week's articles: the floors that keep noise out are lower.
+const SPANS = {
+  week: { days: 7, base: 8, spark: 12, minName: 3, minLift: 2, minWide: 4, minNow: 4, minUsual: 2, rise: 0.25, fadeUsual: 4 },
+  // Early in the day, before the collections have caught up: yesterday and today together
+  twoDays: { days: 2, base: 14, spark: 14, minName: 2, minLift: 1.2, minWide: 2, minNow: 3, minUsual: 1, rise: 0, fadeUsual: Infinity },
+  day: { days: 1, base: 28, spark: 14, minName: 2, minLift: 1, minWide: 2, minNow: 2, minUsual: 1, rise: 0, fadeUsual: Infinity },
+};
 const DAY = 86400000;
 const ELISION = /^(?:l|d|j|s|n|qu|m|c)['’]/i;
 // Capitalised words that open a phrase rather than name something
@@ -78,7 +83,8 @@ const labelOf = (t) => {
 
 const byDateDesc = (a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0);
 
-export function computeMoving(points) {
+export function computeMoving(points, span = 'week') {
+  const { days: WEEK, base: BASE_WEEKS, spark: SPARK_WEEKS, minName, minLift, minWide, minNow, minUsual, rise, fadeUsual } = SPANS[span];
   const dated = points.filter(p => p.date && p.title);
   if (!dated.length) return null;
   const end = dated.reduce((m, p) => (p.date > m ? p.date : m), dated[0].date);
@@ -106,7 +112,7 @@ export function computeMoving(points) {
     }
   }
   let names = [...terms.values()]
-    .filter(t => t.now.length >= 3)
+    .filter(t => t.now.length >= minName)
     .map(t => {
       const usual = t.before / baseWeeks;
       const sources = [...new Set(t.now.map(p => p.source))];
@@ -119,7 +125,7 @@ export function computeMoving(points) {
         ids: new Set(t.now.map(p => p.id)),
       };
     })
-    .filter(t => t.lift >= 2)
+    .filter(t => t.lift >= minLift)
     .sort((a, b) => b.lift * Math.sqrt(b.count) - a.lift * Math.sqrt(a.count));
   // "Fly" and "Fly Gabon", or a minister and their ministry, are the same story: keep the stronger
   const kept = [];
@@ -133,7 +139,7 @@ export function computeMoving(points) {
   // The stories every newspaper picked up this week
   const widely = [...terms.values()]
     .map(t => ({ label: labelOf(t), count: t.now.length, sources: [...new Set(t.now.map(p => p.source))], articles: t.now }))
-    .filter(t => t.label && t.sources.length >= 4)
+    .filter(t => t.label && t.sources.length >= minWide)
     .sort((a, b) => b.sources.length - a.sources.length || b.count - a.count)
     .slice(0, 6);
 
@@ -151,13 +157,13 @@ export function computeMoving(points) {
     const now = s.weeks.at(-1);
     const usual = [...covered].reduce((a, w) => a + s.weeks[SPARK_WEEKS - 1 - w], 0) / baseWeeks;
     return { ...s, now, usual, change: usual ? (now - usual) / usual : null, gaps: s.weeks.map((_, i) => !covered.has(SPARK_WEEKS - 1 - i) && i < SPARK_WEEKS - 1) };
-  }).filter(s => s.usual >= 2 || s.now >= 4);
-  const rising = topics.filter(s => s.now >= 4 && s.change > 0.25).sort((a, b) => (b.now - b.usual) - (a.now - a.usual)).slice(0, 6);
-  const fading = topics.filter(s => s.usual >= 4 && s.change < -0.4).sort((a, b) => (a.now - a.usual) - (b.now - b.usual)).slice(0, 4);
+  }).filter(s => s.usual >= minUsual || s.now >= minNow);
+  const rising = topics.filter(s => s.now >= minNow && s.change > rise).sort((a, b) => (b.now - b.usual) - (a.now - a.usual)).slice(0, 6);
+  const fading = topics.filter(s => s.usual >= fadeUsual && s.change < -0.4).sort((a, b) => (a.now - a.usual) - (b.now - b.usual)).slice(0, 4);
 
   const start = new Date(endT - (WEEK - 1) * DAY).toISOString().slice(0, 10);
   return {
-    start, end,
+    span, start, end,
     week: recent.length,
     usualWeek: baseCount / baseWeeks,
     sources: new Set(recent.map(p => p.source)).size,

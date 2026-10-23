@@ -6,13 +6,23 @@ import { shortDate, sourceLabel } from '../utils/format';
 const fr = (n, d = 0) => n.toLocaleString('fr-FR', { maximumFractionDigits: d, minimumFractionDigits: d });
 const plural = (n, w) => `${fr(n)} ${w}${n > 1 ? 's' : ''}`;
 
-function usualText(usual) {
-  if (usual < 0.5) return 'presque jamais cité avant';
-  if (usual < 1.5) return "environ 1 par semaine d'habitude";
-  return `environ ${fr(usual)} par semaine d'habitude`;
+// The words of each view: this week against the weeks before, or the day against the days before
+const WORDS = {
+  week: { now: 'cette semaine', per: 'semaine', ask: 'cette semaine' },
+  day: { now: "aujourd'hui", per: 'jour', ask: "aujourd'hui" },
+  twoDays: { now: "depuis hier", per: 'jour', ask: 'depuis hier' },
+};
+
+function usualText(usual, span) {
+  const per = WORDS[span].per;
+  // over two days the count is set against two usual days
+  const u = span === 'twoDays' ? usual / 2 : usual;
+  if (u < 0.5) return 'presque jamais cité avant';
+  if (u < 1.5) return `environ 1 par ${per} d'habitude`;
+  return `environ ${fr(u)} par ${per} d'habitude`;
 }
 
-// Twelve weeks of a topic, the current week last and in green. Weeks without collection stay blank.
+// Twelve weeks (or fourteen days) of a topic, the current one last and in colour. Periods without collection stay blank.
 function Spark({ weeks, gaps }) {
   const max = Math.max(...weeks, 1);
   const w = 6;
@@ -31,7 +41,7 @@ function Sources({ list }) {
   return <p className="k-move-sources">{list.slice(0, 4).map(sourceLabel).join(', ')}{list.length > 4 ? ` et ${list.length - 4} autre${list.length > 5 ? 's' : ''}` : ''}</p>;
 }
 
-function NameCard({ t, ask, lead }) {
+function NameCard({ t, ask, lead, span }) {
   // the headline that actually carries the label ("Cour constitutionnelle", not "Cour des comptes")
   const a = t.articles.find(x => x.title.includes(t.label)) || t.articles[0];
   return (
@@ -40,7 +50,7 @@ function NameCard({ t, ask, lead }) {
         <h3>{t.label}</h3>
         <span className="k-move-badge">{t.isNew ? 'Nouveau' : `×${fr(t.lift, t.lift < 10 ? 1 : 0)}`}</span>
       </header>
-      <p className="k-move-count"><b>{plural(t.count, 'article')}</b> cette semaine, {usualText(t.usual)}</p>
+      <p className="k-move-count"><b>{plural(t.count, 'article')}</b> {WORDS[span].now}, {usualText(t.usual, span)}</p>
       <a className="k-move-headline" href={a.url} target="_blank" rel="noreferrer">{a.title}<ArrowUpRight size={13} aria-label="ouvre le site du journal" /></a>
       {lead && t.articles.length > 1 && (
         <ul className="k-move-more">
@@ -50,7 +60,7 @@ function NameCard({ t, ask, lead }) {
         </ul>
       )}
       <Sources list={t.sources} />
-      <button className="k-textlink" onClick={() => ask(`Que se passe-t-il cette semaine avec ${t.label} ?`)}>
+      <button className="k-textlink" onClick={() => ask(`Que se passe-t-il ${WORDS[span].ask} avec ${t.label} ?`)}>
         Demander à l'assistant <ArrowRight size={14} />
       </button>
     </article>
@@ -74,27 +84,46 @@ function TopicRow({ s, ask, up }) {
   );
 }
 
-export default function Moving({ data, ask, children }) {
-  const m = useMemo(() => computeMoving(data.points), [data]);
+export default function Moving({ data, ask, children, period = 'week' }) {
+  const m = useMemo(() => {
+    if (period === 'week') return computeMoving(data.points, 'week');
+    // The latest day while its collections are still coming in reads as noise: until it
+    // holds most of a usual day, the view covers yesterday too
+    const today = computeMoving(data.points, 'day');
+    return today && today.week >= today.usualWeek * 0.6 ? today : computeMoving(data.points, 'twoDays');
+  }, [data, period]);
   const [details, setDetails] = useState(false);
   if (!m) return <div className="k-empty"><p>Pas encore assez d'articles pour dégager des tendances.</p></div>;
   const vsUsual = m.usualWeek ? Math.round(((m.week - m.usualWeek) / m.usualWeek) * 100) : null;
   const [lead, ...others] = m.names;
+  const span = m.span;
+  const w = WORDS[span];
 
   return (
     <div className="k-moving">
-      <p className="k-move-week">
-        Semaine du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux
-        {vsUsual !== null && Math.abs(vsUsual) >= 5 && <>, {vsUsual > 0 ? `${fr(vsUsual)} % de plus` : `${fr(-vsUsual)} % de moins`} qu'une semaine ordinaire</>}.
-        {' '}Comparé aux huit semaines précédentes.
-      </p>
+      {span === 'week' ? (
+        <p className="k-move-week">
+          Semaine du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux
+          {vsUsual !== null && Math.abs(vsUsual) >= 5 && <>, {vsUsual > 0 ? `${fr(vsUsual)} % de plus` : `${fr(-vsUsual)} % de moins`} qu'une semaine ordinaire</>}.
+          {' '}Comparé aux huit semaines précédentes.
+        </p>
+      ) : span === 'day' ? (
+        <p className="k-move-week">
+          {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux. Comparé aux quatre semaines précédentes.
+        </p>
+      ) : (
+        <p className="k-move-week">
+          Du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux.
+          {' '}La journée du {shortDate(m.end)} est encore en cours de collecte : la veille est comptée avec elle.
+        </p>
+      )}
 
       {m.names.length > 0 && (
         <section aria-labelledby="mv-names">
-          <span className="k-eyebrow" id="mv-names">Les noms qui reviennent cette semaine</span>
+          <span className="k-eyebrow" id="mv-names">{span === 'week' ? 'Les noms qui reviennent cette semaine' : `Les noms du jour`}</span>
           <div className="k-move-grid">
-            {lead && <NameCard t={lead} ask={ask} lead />}
-            {others.map(t => <NameCard key={t.label} t={t} ask={ask} />)}
+            {lead && <NameCard t={lead} ask={ask} span={span} lead />}
+            {others.map(t => <NameCard key={t.label} t={t} ask={ask} span={span} />)}
           </div>
         </section>
       )}
@@ -102,7 +131,7 @@ export default function Moving({ data, ask, children }) {
       <div className="k-move-split">
         {m.rising.length > 0 && (
           <section aria-labelledby="mv-up">
-            <span className="k-eyebrow" id="mv-up">Les sujets qui montent</span>
+            <span className="k-eyebrow" id="mv-up">{span === 'week' ? 'Les sujets qui montent' : 'Les sujets du jour'}</span>
             <ul className="k-move-topics">{m.rising.map(s => <TopicRow key={s.name} s={s} ask={ask} up />)}</ul>
           </section>
         )}
@@ -116,11 +145,11 @@ export default function Moving({ data, ask, children }) {
 
       {m.widely.length > 0 && (
         <section className="k-move-wide" aria-labelledby="mv-wide">
-          <span className="k-eyebrow" id="mv-wide">Repris par toute la presse</span>
+          <span className="k-eyebrow" id="mv-wide">{span === 'week' ? 'Repris par toute la presse' : 'Repris par plusieurs journaux'}</span>
           <ol>
             {m.widely.map(t => (
               <li key={t.label}>
-                <button onClick={() => ask(`Que disent les journaux cette semaine sur ${t.label} ?`)}>
+                <button onClick={() => ask(`Que disent les journaux ${w.ask} sur ${t.label} ?`)}>
                   <strong>{t.label}</strong>
                   <span className="k-move-dots" aria-label={`${t.sources.length} journaux sur ${m.sources}`}>
                     {Array.from({ length: m.sources }, (_, i) => <i key={i} className={i < t.sources.length ? 'on' : ''} />)}
@@ -133,12 +162,12 @@ export default function Moving({ data, ask, children }) {
         </section>
       )}
 
-      <section className="k-move-details">
+      {children && <section className="k-move-details">
         <button className="k-btn ghost" aria-expanded={details} onClick={() => setDetails(v => !v)}>
           Statistiques détaillées du corpus <ChevronDown size={15} className={details ? 'flip' : ''} />
         </button>
         {details && children}
-      </section>
+      </section>}
     </div>
   );
 }

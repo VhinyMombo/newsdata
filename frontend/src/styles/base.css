@@ -543,3 +543,19 @@ body:has(.k-install) { padding-bottom: 0; background: var(--hero, var(--bg-alt))
 .k-install-banner .k-btn { min-height: 36px; padding: 0.5rem 0.9rem; font-size: 0.86rem; flex: none; }
 .k-install-banner-close { flex: none; width: 36px; height: 36px; margin-right: -8px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
 .k-install-banner-close:hover { color: var(--ink); background: var(--green-soft); }
+
+/* ── Saved conversations (Assistant, empty state) ─────────── */
+.k-saved { margin-top: 28px; display: grid; gap: 10px; }
+.k-saved ul { list-style: none; display: grid; border-top: 1px solid var(--rule); }
+.k-saved li { display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
+.k-saved-open { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; row-gap: 2px; padding: 12px 4px; text-align: left; color: var(--muted); }
+.k-saved-open svg { grid-row: 1 / 3; align-self: start; margin-top: 4px; }
+.k-saved-open:hover .k-saved-title { color: var(--green); }
+.k-saved-title { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.95rem; line-height: 1.4; color: var(--ink); }
+.k-saved-meta { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.k-saved-del { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
+.k-saved-del:hover { color: var(--ink); background: var(--green-soft); }
+.k-saved > .k-textlink { justify-self: start; }
+.k-saved-hint { margin-top: 32px; display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border-radius: 10px; background: var(--bg-alt); font-size: 0.9rem; line-height: 1.5; color: var(--ink-soft); }
+.k-saved-hint svg { flex: none; margin-top: 3px; color: var(--muted); }
+.k-saved-hint .k-textlink { display: inline; font-size: inherit; }

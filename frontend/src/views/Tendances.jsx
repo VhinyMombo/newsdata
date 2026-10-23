@@ -18,7 +18,7 @@ function useIsPhone() {
 }
 
 export default function Tendances({ corpus, sub, ask, session, health, latestSources }) {
-  const tab = sub === 'carte' ? 'carte' : 'chiffres';
+  const tab = sub === 'carte' ? 'carte' : sub === 'jour' ? 'jour' : 'chiffres';
   const isPhone = useIsPhone();
   const { data, error, loading, load } = corpus;
   useEffect(() => { load(); }, [load]);
@@ -28,10 +28,10 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
       <header className="k-page-head">
         <span className="k-eyebrow">Tendances</span>
         <h1 className="k-title">Ce qui bouge dans la presse</h1>
-        <p className="k-dek">Les noms et les sujets qui reviennent plus que d'habitude cette semaine. Touchez-en un pour demander à l'assistant ce qui se passe.</p>
+        <p className="k-dek">Les noms et les sujets qui reviennent plus que d'habitude, aujourd'hui ou cette semaine. Touchez-en un pour demander à l'assistant ce qui se passe.</p>
       </header>
       <div className="k-segmented" role="tablist" aria-label="Tendances">
-        {[['chiffres', 'Cette semaine'], ['carte', 'La carte des sujets']].map(([k, l]) => (
+        {[['jour', "Aujourd'hui"], ['chiffres', isPhone ? 'Semaine' : 'Cette semaine'], ['carte', isPhone ? 'Carte' : 'La carte des sujets']].map(([k, l]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => go(`tendances/${k}`)}>{l}</button>
         ))}
       </div>
@@ -41,6 +41,8 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
         <Thinking phrases={[loading ? 'Chargement du corpus (une vingtaine de mégaoctets)…' : 'Préparation…', 'Encore un instant…']} interval={6000} />
       ) : tab === 'carte' ? (
         <SemanticMap data={data} latestSources={latestSources} isPhone={isPhone} />
+      ) : tab === 'jour' ? (
+        <Moving data={data} ask={ask} period="day" />
       ) : (
         <Moving data={data} ask={ask}>
           <MetricsDashboard data={data} gabonToday={health.gabonToday} onAskAssistant={(q) => ask(q)} user={session.user} authToken={session.authToken} />

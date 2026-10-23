@@ -10,6 +10,7 @@ Usage:
     .venv/bin/python api.py          # runs on http://localhost:8000
 """
 
+import json
 import logging
 import math
 import os
@@ -24,6 +25,7 @@ import chromadb
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -632,6 +634,22 @@ class FollowRequest(BaseModel):
     label: str = Field(min_length=1, max_length=200)
 
 
+class ConversationTurn(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(default="", max_length=20000)
+    # The cited articles, as the frontend shows them (title, url, source, date…)
+    sources: list[dict] = Field(default=[], max_length=10)
+
+
+class SaveConversationRequest(BaseModel):
+    corpus: str = Field(default="presse", pattern="^(presse|codes)$")
+    turns: list[ConversationTurn] = Field(min_length=1, max_length=40)
+
+
+_CONV_ID = PathParam(pattern=r"^[A-Za-z0-9_-]{1,40}$")
+CONVERSATION_MAX_BYTES = 400_000
+
+
 class PushKeys(BaseModel):
     p256dh: str = Field(min_length=1, max_length=500)
     auth: str = Field(min_length=1, max_length=500)
@@ -716,6 +734,37 @@ def post_follow(req: FollowRequest, user: dict = Depends(require_user)):
 def delete_follow(type: str, value: str, user: dict = Depends(require_user)):
     auth.remove_follow(user["id"], type, value)
     return auth.list_follows(user["id"])
+
+
+# Assistant conversations kept for signed-in readers, to reopen from any device
+@app.get("/conversations")
+def get_conversations(user: dict = Depends(require_user)):
+    return auth.list_conversations(user["id"])
+
+
+@app.get("/conversations/{conv_id}")
+def get_conversation(conv_id: str = _CONV_ID, user: dict = Depends(require_user)):
+    conv = auth.get_conversation(user["id"], conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable.")
+    return conv
+
+
+@app.put("/conversations/{conv_id}")
+@limiter.limit("60/minute")
+def put_conversation(request: Request, req: SaveConversationRequest, conv_id: str = _CONV_ID,
+                     user: dict = Depends(require_user)):
+    turns = [t.model_dump() for t in req.turns]
+    if len(json.dumps(turns, ensure_ascii=False).encode()) > CONVERSATION_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Conversation trop longue.")
+    auth.save_conversation(user["id"], conv_id, req.corpus, turns)
+    return {"status": "ok"}
+
+
+@app.delete("/conversations/{conv_id}")
+def delete_conversation(conv_id: str = _CONV_ID, user: dict = Depends(require_user)):
+    auth.delete_conversation(user["id"], conv_id)
+    return {"status": "ok"}
 
 
 @app.get("/push/vapid_public_key")
