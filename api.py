@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 
 import auth
 import llm
+import mailer
 
 load_dotenv()
 
@@ -622,6 +623,15 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+
+
 class UpdateProfileRequest(BaseModel):
     display_name: str | None = Field(default=None, max_length=80)
     current_password: str | None = Field(default=None, max_length=200)
@@ -690,6 +700,59 @@ def login(request: Request, req: LoginRequest):
         user, token = auth.authenticate(req.email, req.password)
     except auth.AuthError as e:
         raise HTTPException(status_code=401, detail=str(e))
+    return {"user": user, "token": token}
+
+
+PUBLIC_URL = os.getenv("PUBLIC_URL", "https://lekiosque.hodologic.fr").rstrip("/")
+
+
+def _send_reset_mail(user: dict, token: str) -> None:
+    link = f"{PUBLIC_URL}/#/reinitialiser?token={token}"
+    name = user["display_name"].split(" ")[0]
+    text = (
+        f"Bonjour {name},\n\n"
+        "Pour choisir un nouveau mot de passe sur Le Kiosque, ouvrez ce lien :\n"
+        f"{link}\n\n"
+        "Il est valable une heure et ne sert qu'une fois. Si vous n'avez rien demandé, "
+        "ignorez ce message : votre mot de passe actuel reste valable.\n\n"
+        "Le Kiosque\nhttps://lekiosque.hodologic.fr"
+    )
+    html = f"""<div style="font-family:Georgia,serif;max-width:480px;margin:0 auto;padding:24px;color:#0F2A3A">
+<div style="border-top:4px solid #7A1F2B;padding-top:20px;text-align:center">
+<img src="{PUBLIC_URL}/icons/icon-192.png" width="56" height="56" alt="" style="border-radius:12px">
+<div style="font-size:24px;font-weight:600;margin-top:10px">Le Kiosque</div></div>
+<p style="font-size:16px;line-height:1.5;margin-top:24px">Bonjour {name},</p>
+<p style="font-size:16px;line-height:1.5">Pour choisir un nouveau mot de passe, touchez le bouton ci-dessous.</p>
+<p style="text-align:center;margin:28px 0"><a href="{link}" style="background:#7A1F2B;color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-family:Arial,sans-serif;font-weight:600;font-size:15px">Choisir un nouveau mot de passe</a></p>
+<p style="font-size:14px;line-height:1.5;color:#5B6B7A">Le lien est valable une heure et ne sert qu'une fois. Si vous n'avez rien demandé, ignorez ce message : votre mot de passe actuel reste valable.</p>
+</div>"""
+    mailer.send(user["email"], "Le Kiosque : votre nouveau mot de passe", text, html)
+
+
+@app.post("/auth/forgot")
+@limiter.limit("3/minute")
+def forgot_password(request: Request, req: ForgotPasswordRequest):
+    # Same answer whether or not the address has an account: the form must not
+    # reveal who is registered
+    if not mailer.configured():
+        raise HTTPException(status_code=503, detail="L'envoi d'e-mails n'est pas disponible pour le moment.")
+    found = auth.create_password_reset(req.email)
+    if found:
+        try:
+            _send_reset_mail(*found)
+        except Exception:
+            logger.exception("password reset mail failed")
+            raise HTTPException(status_code=502, detail="L'e-mail n'a pas pu partir. Réessayez dans un instant.")
+    return {"status": "ok"}
+
+
+@app.post("/auth/reset")
+@limiter.limit("10/minute")
+def reset_password(request: Request, req: ResetPasswordRequest):
+    try:
+        user, token = auth.reset_password(req.token, req.password)
+    except auth.AuthError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"user": user, "token": token}
 
 

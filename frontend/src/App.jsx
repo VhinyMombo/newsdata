@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback } from 'react';
+import { lazy, Suspense, useCallback, useEffect } from 'react';
 import Masthead from './components/Masthead';
 import AuthModal from './components/AuthModal';
 import InstallBanner from './components/InstallBanner';
@@ -37,6 +37,15 @@ export default function App() {
     runSearch(q, null, target, pinned, !!pinned);
   }, [switchCorpus, runSearch]);
 
+  // The password reset link lands here: open the window, then clean the token out of the address bar
+  const { openReset } = session;
+  useEffect(() => {
+    if (route.view !== 'reinitialiser') return;
+    const token = route.params.get('token');
+    if (token) openReset(token);
+    window.history.replaceState(null, '', '#/');
+  }, [route, openReset]);
+
   const view = ['une', 'assistant', 'editions', 'tendances', 'codes'].includes(route.view) ? route.view : 'une';
 
   return (
@@ -56,6 +65,8 @@ export default function App() {
           authToken={session.authToken}
           onLogout={session.logout}
           onProfileUpdated={session.setUser}
+          onForgot={session.forgot}
+          resetToken={session.resetToken}
         />
       )}
 

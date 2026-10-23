@@ -9,6 +9,7 @@ JWT isn't, without a blocklist that's just this table by another name.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -61,6 +62,14 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    expires_at TEXT NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS conversations (
     id         TEXT NOT NULL,
     user_id    INTEGER NOT NULL,
@@ -319,3 +328,49 @@ def save_conversation(user_id: int, conv_id: str, corpus: str, turns: list[dict]
 def delete_conversation(user_id: int, conv_id: str) -> None:
     with _conn() as conn:
         conn.execute("DELETE FROM conversations WHERE user_id = ? AND id = ?", (user_id, conv_id))
+
+
+# ── Password reset by e-mail ────────────────────────────────────────────────
+
+RESET_TTL_MINUTES = 60
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_password_reset(email: str) -> tuple[dict, str] | None:
+    """A one-hour, single-use reset token for this address, or None when no
+    account uses it. Only the token's hash is stored: a leaked database copy
+    cannot be used to reset anyone's password."""
+    email = email.strip().lower()
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        if not row:
+            return None
+        token = secrets.token_urlsafe(32)
+        expires_at = (datetime.utcnow() + timedelta(minutes=RESET_TTL_MINUTES)).isoformat()
+        conn.execute(
+            "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+            (_hash_token(token), row["id"], expires_at),
+        )
+        return _public_user(row), token
+
+
+def reset_password(token: str, new_password: str) -> tuple[dict, str]:
+    """Set a new password from a reset link; every other session is signed out."""
+    if len(new_password) < 8:
+        raise AuthError("Le mot de passe doit contenir au moins 8 caractères.")
+    with _conn() as conn:
+        reset = conn.execute(
+            "SELECT * FROM password_resets WHERE token_hash = ? AND used = 0 AND expires_at > ?",
+            (_hash_token(token), datetime.utcnow().isoformat()),
+        ).fetchone()
+        if not reset:
+            raise AuthError("Ce lien n'est plus valable. Demandez-en un nouveau.")
+        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, reset["user_id"]))
+        conn.execute("UPDATE password_resets SET used = 1 WHERE user_id = ?", (reset["user_id"],))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (reset["user_id"],))
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (reset["user_id"],)).fetchone()
+        return _public_user(row), _create_session(conn, row["id"])

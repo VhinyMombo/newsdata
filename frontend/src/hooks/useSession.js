@@ -8,7 +8,9 @@ const TOKEN_KEY = 'lekiosque_auth_token';
 export function useSession() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
-  const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register' | 'profile'
+  const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register' | 'forgot' | 'reset' | 'profile'
+  // From the e-mailed link (#/reinitialiser?token=…), kept here once the address bar is cleaned
+  const [resetToken, setResetToken] = useState(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -46,6 +48,26 @@ export function useSession() {
     }
   }, []);
 
+  // Always "sent" when the server accepts: it never says whether the address has an account
+  const forgot = useCallback(async (email) => {
+    setAuthBusy(true);
+    setAuthError('');
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Une erreur est survenue.');
+      return true;
+    } catch (e) {
+      setAuthError(e.message);
+      return false;
+    } finally {
+      setAuthBusy(false);
+    }
+  }, []);
+
+  const openReset = useCallback((token) => { setResetToken(token); setAuthError(''); setAuthModal('reset'); }, []);
+
   const logout = useCallback(() => {
     if (authToken) fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: authHeaders(authToken) }).catch(() => {});
     localStorage.removeItem(TOKEN_KEY);
@@ -56,5 +78,5 @@ export function useSession() {
 
   const openAuth = useCallback((mode) => { setAuthError(''); setAuthModal(mode); }, []);
 
-  return { authToken, user, setUser, authModal, setAuthModal, openAuth, authBusy, authError, submit, logout };
+  return { authToken, user, setUser, authModal, setAuthModal, openAuth, authBusy, authError, submit, logout, forgot, resetToken, openReset };
 }

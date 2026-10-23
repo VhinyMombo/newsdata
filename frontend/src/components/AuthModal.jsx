@@ -17,10 +17,11 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
-export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated }) {
+export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
 
   // Profile-only local state: separate from login/register fields since
   // both can be open across a mode switch without bleeding into each other
@@ -145,8 +146,10 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
         {mode !== 'profile' ? (
           <form
             className="auth-form"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
+              if (mode === 'forgot') { if (await onForgot(email)) setForgotSent(true); return; }
+              if (mode === 'reset') { onSubmit('reset', { token: resetToken, password }); return; }
               onSubmit(mode, mode === 'register'
                 ? { email, password, display_name: displayName }
                 : { email, password });
@@ -158,38 +161,69 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
               <span className="auth-brand-rule" aria-hidden="true" />
               <p className="auth-brand-dek">La presse et les lois, à portée de question.</p>
             </header>
-            <div className="auth-tabs" role="tablist" aria-label="Compte">
-              <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'on' : ''} onClick={() => onSwitchMode('login')}>Se connecter</button>
-              <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'on' : ''} onClick={() => onSwitchMode('register')}>Créer un compte</button>
-            </div>
-            <h2 className="sr-only">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
-            {/* Said in both modes: the header button opens "Se connecter", where most
-            visitors have no account yet */}
-            <ul className="auth-perks">
-              <li><History size={16} aria-hidden="true" /><span><b>Vos conversations gardées.</b> Reprenez-les plus tard, sur tous vos appareils.</span></li>
-              <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
-              <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
-            </ul>
-            {mode === 'register' && (
+            {mode === 'forgot' || mode === 'reset' ? (<>
+              <h2 className="auth-step-title">{mode === 'forgot' ? 'Mot de passe oublié' : 'Nouveau mot de passe'}</h2>
+              {mode === 'forgot' && forgotSent ? (
+                <p className="auth-step-text">Si un compte existe pour <b>{email}</b>, un e-mail vient de partir avec un lien pour choisir un nouveau mot de passe. Il est valable une heure. Pensez à regarder dans les indésirables.</p>
+              ) : (
+                <p className="auth-step-text">{mode === 'forgot'
+                  ? "Indiquez l'adresse de votre compte : vous recevrez un lien pour choisir un nouveau mot de passe."
+                  : 'Choisissez un nouveau mot de passe, de 8 caractères au moins. Vous serez connecté ensuite.'}</p>
+              )}
+              {mode === 'forgot' && !forgotSent && (
+                <input
+                  className="auth-input" type="email" placeholder="E-mail" value={email}
+                  onChange={e => setEmail(e.target.value)} required autoComplete="username"
+                />
+              )}
+              {mode === 'reset' && (
+                <input
+                  className="auth-input" type="password" placeholder="Nouveau mot de passe" value={password}
+                  onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password"
+                />
+              )}
+            </>) : (<>
+              <div className="auth-tabs" role="tablist" aria-label="Compte">
+                <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'on' : ''} onClick={() => onSwitchMode('login')}>Se connecter</button>
+                <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'on' : ''} onClick={() => onSwitchMode('register')}>Créer un compte</button>
+              </div>
+              <h2 className="sr-only">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
+              {/* Said in both modes: the header button opens "Se connecter", where most
+              visitors have no account yet */}
+              <ul className="auth-perks">
+                <li><History size={16} aria-hidden="true" /><span><b>Vos conversations gardées.</b> Reprenez-les plus tard, sur tous vos appareils.</span></li>
+                <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
+                <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
+              </ul>
+              {mode === 'register' && (
+                <input
+                  className="auth-input" placeholder="Nom affiché" value={displayName}
+                  onChange={e => setDisplayName(e.target.value)} required maxLength={80}
+                />
+              )}
               <input
-                className="auth-input" placeholder="Nom affiché" value={displayName}
-                onChange={e => setDisplayName(e.target.value)} required maxLength={80}
+                className="auth-input" type="email" placeholder="E-mail" value={email}
+                onChange={e => setEmail(e.target.value)} required autoComplete="username"
               />
-            )}
-            <input
-              className="auth-input" type="email" placeholder="E-mail" value={email}
-              onChange={e => setEmail(e.target.value)} required autoComplete="username"
-            />
-            <input
-              className="auth-input" type="password" placeholder="Mot de passe" value={password}
-              onChange={e => setPassword(e.target.value)} required minLength={8}
-              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-            />
+              <input
+                className="auth-input" type="password" placeholder="Mot de passe" value={password}
+                onChange={e => setPassword(e.target.value)} required minLength={8}
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+              />
+            </>)}
             {error && <p className="auth-error">{error}</p>}
-            <button type="submit" className="auth-submit" disabled={busy}>
-              {busy ? '…' : mode === 'register' ? 'Créer le compte' : 'Se connecter'}
-            </button>
-            <p className="auth-fineprint">Gratuit. Votre e-mail sert seulement à vous connecter.</p>
+            {!(mode === 'forgot' && forgotSent) && (
+              <button type="submit" className="auth-submit" disabled={busy}>
+                {busy ? '…' : mode === 'register' ? 'Créer le compte' : mode === 'forgot' ? 'Recevoir le lien' : mode === 'reset' ? 'Enregistrer et me connecter' : 'Se connecter'}
+              </button>
+            )}
+            {mode === 'login' && (
+              <button type="button" className="auth-switch" onClick={() => { setForgotSent(false); onSwitchMode('forgot'); }}>Mot de passe oublié ?</button>
+            )}
+            {mode === 'forgot' && (
+              <button type="button" className="auth-switch" onClick={() => onSwitchMode('login')}>Retour à la connexion</button>
+            )}
+            {(mode === 'login' || mode === 'register') && <p className="auth-fineprint">Gratuit. Votre e-mail sert seulement à vous connecter.</p>}
           </form>
         ) : (
           <div className="auth-profile">
