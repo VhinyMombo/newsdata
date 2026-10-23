@@ -14,6 +14,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Kiosque" />
     <title>Le Kiosque</title>
+    <meta name="description" content="La presse gabonaise, interrogeable : plus de 26 000 articles de 13 journaux, mis à jour toutes les deux heures. Posez une question, l'assistant répond en citant ses sources." />
+    <!-- Link previews (WhatsApp, Facebook, Messenger, X): the image keeps its mark and
+    name in the centre, since WhatsApp crops it to a square for small previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Le Kiosque" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:url" content="https://lekiosque.hodologic.fr/" />
+    <meta property="og:title" content="Le Kiosque : la presse gabonaise, interrogeable" />
+    <meta property="og:description" content="Plus de 26 000 articles de 13 journaux, mis à jour toutes les deux heures. Posez une question, l'assistant répond en citant ses sources." />
+    <meta property="og:image" content="https://lekiosque.hodologic.fr/og-kiosque.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Le Kiosque, la presse gabonaise interrogeable" />
+    <meta name="twitter:card" content="summary_large_image" />
     <!-- Fonts requested from the start, so the splash wordmark is already in Newsreader -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -63,6 +78,15 @@
           }, Math.max(0, hold - (Date.now() - start)));
         };
       })();
+    </script>
+    <script>
+      // Chrome's install dialog is offered once, often before the app has loaded: keep it for
+      // the install page and banner (useInstall), instead of Chrome's own mini bar
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__kiosqueInstall = e;
+        window.dispatchEvent(new Event('kiosque-installable'));
+      });
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>

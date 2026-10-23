@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback } from 'react';
 import Masthead from './components/Masthead';
 import AuthModal from './components/AuthModal';
+import InstallBanner from './components/InstallBanner';
 import Une from './views/Une';
 import Assistant from './views/Assistant';
 import Editions from './views/Editions';
@@ -41,6 +42,7 @@ export default function App() {
   return (
     <div className={`k-app view-${view}`}>
       <Masthead view={view} health={health} session={session} />
+      {view !== 'assistant' && <InstallBanner />}
 
       {session.authModal && (
         <AuthModal

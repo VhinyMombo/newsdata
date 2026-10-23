@@ -507,3 +507,37 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 
 /* No italics anywhere: emphasis is carried by colour or weight */
 em, i, cite, dfn, address { font-style: normal; }
+
+/* ── Install: the shared /installer page and the banner ───── */
+body:has(.k-install) { padding-bottom: 0; background: var(--hero, var(--bg-alt)); }
+.k-install { flex: 1; display: grid; place-items: start center; padding: clamp(40px, 9vh, 88px) 16px calc(40px + env(safe-area-inset-bottom)); background: var(--hero, var(--bg-alt)); }
+.k-install-card { width: 100%; max-width: 440px; display: grid; justify-items: center; text-align: center; }
+.k-install-icon { width: 88px; height: 88px; border-radius: 20px; box-shadow: 0 6px 22px rgba(15, 42, 58, 0.14); }
+.k-install h1 { margin-top: 20px; font: 600 2.1rem/1.05 var(--serif); color: var(--ink); }
+.k-install-rule { width: 128px; height: 2px; margin-top: 12px; background: var(--green); }
+.k-install-dek { margin-top: 16px; max-width: 34ch; font: 400 1.08rem/1.5 var(--serif); color: var(--ink-soft); text-wrap: pretty; }
+.k-install-how { width: 100%; margin-top: 32px; padding: 22px 20px 24px; background: var(--white); border: 1px solid var(--rule); border-radius: 12px; display: grid; justify-items: stretch; gap: 14px; text-align: left; }
+.k-install-how h2 { font: 600 0.72rem/1.2 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.k-install-cta { width: 100%; min-height: 52px; font-size: 1.02rem; font-weight: 600; }
+.k-install-note, .k-install-or { font-size: 0.88rem; line-height: 1.5; color: var(--muted); }
+.k-install-lead { font-size: 0.96rem; line-height: 1.5; color: var(--ink-soft); }
+.k-install-steps { list-style: none; display: grid; gap: 10px; }
+.k-install-steps li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--bg-alt); }
+.k-install-num { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: var(--on-green); font: 600 0.85rem/1 var(--sans); }
+.k-install-text { font-size: 0.95rem; line-height: 1.45; color: var(--ink); }
+.k-install-glyph { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 8px; background: var(--white); border: 1px solid var(--rule); color: #0A84FF; }
+.k-install-copy { justify-self: start; }
+.k-install-url { font: 600 1.05rem/1.3 var(--sans); color: var(--ink); word-break: break-all; }
+.k-install-done { width: 100%; margin-top: 32px; display: flex; gap: 12px; align-items: flex-start; padding: 18px 20px; text-align: left; border-radius: 12px; background: var(--green-soft); color: var(--green); }
+.k-install-done p { color: var(--ink); line-height: 1.5; }
+.k-install-skip { margin-top: 24px; font-size: 0.92rem; color: var(--muted); text-underline-offset: 3px; }
+.k-install-skip:hover { color: var(--green); }
+
+.k-install-banner { border-bottom: 1px solid var(--rule); background: var(--tint, var(--bg-alt)); }
+.k-install-banner-row { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+.k-install-banner img { width: 32px; height: 32px; border-radius: 8px; flex: none; }
+.k-install-banner p { flex: 1; min-width: 0; font-size: 0.88rem; line-height: 1.35; color: var(--ink-soft); }
+.k-install-banner p strong { color: var(--ink); font-weight: 600; }
+.k-install-banner .k-btn { min-height: 36px; padding: 0.5rem 0.9rem; font-size: 0.86rem; flex: none; }
+.k-install-banner-close { flex: none; width: 36px; height: 36px; margin-right: -8px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); }
+.k-install-banner-close:hover { color: var(--ink); background: var(--green-soft); }

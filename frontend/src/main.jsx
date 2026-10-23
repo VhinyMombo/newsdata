@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './styles/base.css'
 import './styles/accent.css'
 import App from './App.jsx'
+import Installer from './views/Installer.jsx'
 import { registerSW } from 'virtual:pwa-register'
 
 // Installed on a phone, the app can stay open in the background for days without
@@ -18,9 +19,13 @@ registerSW({
   },
 })
 
+// The shared install link gets its own light page: the app would first pull the 20 MB
+// corpus export, a heavy start on a phone's data plan for someone who has not chosen yet
+const installer = window.location.pathname.replace(/\/+$/, '') === '/installer'
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    {installer ? <Installer /> : <App />}
   </StrictMode>,
 )
 
