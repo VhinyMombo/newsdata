@@ -4,6 +4,9 @@ import { API_URL, authHeaders } from '../utils/api';
 import { clock, longDate, sourceLabel } from '../utils/format';
 import { computeFollowDeltas } from '../utils/categories';
 
+// The catch-all buckets of normalize_category (api.py): a label that says nothing
+const GENERIC_THEMES = new Set(['Non classé', 'Autres']);
+
 const LANDING_LAST_VISIT_KEY = 'lekiosque_landing_last_seen_date';
 const EXAMPLES = ['Que retenir de la journée ?', 'Où en est la réforme du titre foncier ?', 'Que se passe-t-il avec la SEEG ?'];
 const GENERIC = new Set(['Non classé', 'Autres']);
@@ -218,7 +221,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                   </header>
                   <ul className="k-list">
                     {brief.slice(0, 10).map(a => (
-                      <li key={a.url}><span className="k-label k-brief-theme">{a.theme}</span><Story ask={ask} a={a} size="xs" lede={false} /></li>
+                      <li key={a.url}>{!GENERIC_THEMES.has(a.theme) && <span className="k-label k-brief-theme">{a.theme}</span>}<Story ask={ask} a={a} size="xs" lede={false} /></li>
                     ))}
                   </ul>
                 </section>
