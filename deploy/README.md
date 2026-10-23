@@ -170,3 +170,24 @@ Le site envoie, en plus des pages vues : `question` (rubrique, origine),
 `comparaison`, `installation-demandee`, `installation`, `inscription` et `pdf`.
 Chaque visite porte l'étiquette (*tag*) `navigateur` ou `application`, selon
 qu'elle vient du navigateur ou de l'application installée.
+
+## Sauvegardes
+
+Chaque nuit à 3 h 30, `deploy/backup.sh` range dans `~/backups/` une archive
+`lekiosque-AAAA-MM-JJ.tar.gz` (lisible par `ubuntu` seul), gardée 14 jours :
+les comptes, sujets suivis et conversations (`auth.db`), l'archive des comptes
+rendus (`reports_archive.db`), les statistiques Umami (`umami.sql.gz`) et les
+secrets (`.env*`, `credentials.json`). Les articles n'y sont pas : la collecte
+les reconstruit depuis les Google Sheets. Le Mac en garde une copie
+(`~/Backups/lekiosque`, récupérée chaque jour à 10 h par `deploy/pull-backups.sh`,
+installé en `~/Backups/pull-lekiosque.sh` avec un agent launchd).
+
+Restaurer, sur le serveur :
+
+```bash
+mkdir /tmp/r && tar -xzf ~/backups/lekiosque-AAAA-MM-JJ.tar.gz -C /tmp/r
+docker cp /tmp/r/auth.db "$($DC ps -q api)":/data/auth.db
+docker cp /tmp/r/reports_archive.db "$($DC ps -q api)":/data/reports_archive.db
+$DC exec -u root api chown -R 10001:10001 /data && $DC restart api
+gunzip -c /tmp/r/umami.sql.gz | $DC exec -T umami-db psql -U umami -d umami
+```
