@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import {
   Landmark, TrendingUp, Users, Scale, Trophy, MapPin, Palette, Leaf, Building2, Globe, HeartPulse, GraduationCap, Package, Star, X, Flame, BellOff,
@@ -6,6 +6,7 @@ import {
 import { API_URL } from '../utils/api';
 import { sourceLabel } from '../utils/format';
 import { normalizeCategory, titleWords, titlePhrases, computeFollowDeltas, PROFILE_COLORS, PROFILE_OTHER, PROFILE_OTHER_COLOR } from '../utils/categories';
+import { useFollows } from '../hooks/useFollows';
 
 // ── Custom Treemap Algorithm using Squarify approach ───────────────────────
 function computeTreemap(data, width, height) {
@@ -201,7 +202,6 @@ function CustomTreemap({ data, total, categories, isFollowed, toggleFollow, onAs
   );
 }
 
-const FOLLOWS_KEY = 'lekiosque_follows';
 const LAST_VISIT_KEY = 'lekiosque_stats_last_seen_date';
 
 export default function MetricsDashboard({ data, gabonToday, onAskAssistant, user, authToken }) {
@@ -210,59 +210,8 @@ export default function MetricsDashboard({ data, gabonToday, onAskAssistant, use
   const profileChartRef = useRef(null);
 
   // Followed keywords/sources/thèmes — persisted so the "since your last
-  // visit" strip below has something to diff against on the next visit.
-  // localStorage stays the baseline (works logged-out); once signed in, the
-  // server becomes the source of truth and any local-only follows (e.g.
-  // picked before creating an account) are migrated up on the first mount
-  // after login rather than silently dropped.
-  const [follows, setFollows] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(FOLLOWS_KEY) || '[]'); } catch { return []; }
-  });
-  useEffect(() => {
-    localStorage.setItem(FOLLOWS_KEY, JSON.stringify(follows));
-  }, [follows]);
-  const migratedRef = useRef(false);
-  useEffect(() => {
-    if (!user || !authToken || migratedRef.current) return;
-    migratedRef.current = true;
-    (async () => {
-      try {
-        const res = await fetch(`${API_URL}/follows`, { headers: { Authorization: `Bearer ${authToken}` } });
-        const serverFollows = res.ok ? await res.json() : [];
-        const localOnly = follows.filter(f => !serverFollows.some(sf => sf.type === f.type && sf.value === f.value));
-        await Promise.all(localOnly.map(f => fetch(`${API_URL}/follows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-          body: JSON.stringify(f),
-        }).catch(() => {})));
-        setFollows([...serverFollows, ...localOnly]);
-      } catch { /* stay on the local list if the sync itself fails */ }
-    })();
-  }, [user, authToken]);
-
-  const isFollowed = useCallback(
-    (type, value) => follows.some(f => f.type === type && f.value === value),
-    [follows]
-  );
-  const toggleFollow = useCallback((type, value, label) => {
-    const existed = follows.some(f => f.type === type && f.value === value);
-    setFollows(prev => existed
-      ? prev.filter(f => !(f.type === type && f.value === value))
-      : [...prev, { type, value, label }]);
-    if (user && authToken) {
-      if (existed) {
-        fetch(`${API_URL}/follows?type=${encodeURIComponent(type)}&value=${encodeURIComponent(value)}`, {
-          method: 'DELETE', headers: { Authorization: `Bearer ${authToken}` },
-        }).catch(() => {});
-      } else {
-        fetch(`${API_URL}/follows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-          body: JSON.stringify({ type, value, label }),
-        }).catch(() => {});
-      }
-    }
-  }, [follows, user, authToken]);
+  // visit" strip below has something to diff against on the next visit
+  const { follows, isFollowed, toggleFollow } = useFollows({ user, authToken });
   // Snapshot the *previous* visit's date once per mount, before this visit
   // overwrites it below — same "mark as seen on open" pattern as the report
   // archive badge, anchored on the corpus's own latest article date (not the

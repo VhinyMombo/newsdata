@@ -42,9 +42,9 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
       ) : tab === 'carte' ? (
         <SemanticMap data={data} latestSources={latestSources} isPhone={isPhone} />
       ) : tab === 'jour' ? (
-        <Moving data={data} ask={ask} period="day" />
+        <Moving data={data} ask={ask} period="day" session={session} />
       ) : (
-        <Moving data={data} ask={ask}>
+        <Moving data={data} ask={ask} session={session}>
           <MetricsDashboard data={data} gabonToday={health.gabonToday} onAskAssistant={(q) => ask(q)} user={session.user} authToken={session.authToken} />
         </Moving>
       )}

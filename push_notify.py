@@ -58,7 +58,10 @@ def _matches(item: dict, row: tuple) -> bool:
     if item["type"] == "theme":
         return api.normalize_category(category, source) == item["value"]
     if item["type"] == "keyword":
-        return item["value"] in title_words(title)
+        # A followed name can be several words ("oligui nguema"): match it in the
+        # lowercased title, like the front page does, not against single words
+        value = item["value"].lower()
+        return value in title_words(title) if " " not in value else value in (title or "").lower()
     return False
 
 

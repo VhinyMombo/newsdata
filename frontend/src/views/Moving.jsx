@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, Star } from 'lucide-react';
 import { computeMoving } from '../utils/trends';
 import { shortDate, sourceLabel } from '../utils/format';
+import { useFollows } from '../hooks/useFollows';
 
 const fr = (n, d = 0) => n.toLocaleString('fr-FR', { maximumFractionDigits: d, minimumFractionDigits: d });
 const plural = (n, w) => `${fr(n)} ${w}${n > 1 ? 's' : ''}`;
@@ -41,7 +42,24 @@ function Sources({ list }) {
   return <p className="k-move-sources">{list.slice(0, 4).map(sourceLabel).join(', ')}{list.length > 4 ? ` et ${list.length - 4} autre${list.length > 5 ? 's' : ''}` : ''}</p>;
 }
 
-function NameCard({ t, ask, lead, span }) {
+// Follow a name: its articles then show on the front page and, with an account, in the
+// daily notification. Without an account the follow is kept on this phone and the
+// sign-up window says what an account adds.
+function FollowStar({ label, follow, session }) {
+  const value = label.toLowerCase();
+  const on = follow.isFollowed('keyword', value);
+  const click = () => {
+    if (follow.toggleFollow('keyword', value, label) && !session?.user) session?.openAuth('register');
+  };
+  return (
+    <button className={`k-move-follow ${on ? 'on' : ''}`} onClick={click} aria-pressed={on}
+      aria-label={on ? `Ne plus suivre ${label}` : `Suivre ${label}`} title={on ? 'Suivi' : 'Suivre'}>
+      <Star size={17} fill={on ? 'currentColor' : 'none'} />
+    </button>
+  );
+}
+
+function NameCard({ t, ask, lead, span, follow, session }) {
   // the headline that actually carries the label ("Cour constitutionnelle", not "Cour des comptes")
   const a = t.articles.find(x => x.title.includes(t.label)) || t.articles[0];
   return (
@@ -49,6 +67,7 @@ function NameCard({ t, ask, lead, span }) {
       <header>
         <h3>{t.label}</h3>
         <span className="k-move-badge">{t.isNew ? 'Nouveau' : `×${fr(t.lift, t.lift < 10 ? 1 : 0)}`}</span>
+        <FollowStar label={t.label} follow={follow} session={session} />
       </header>
       <p className="k-move-count"><b>{plural(t.count, 'article')}</b> {WORDS[span].now}, {usualText(t.usual, span)}</p>
       <a className="k-move-headline" href={a.url} target="_blank" rel="noreferrer">{a.title}<ArrowUpRight size={13} aria-label="ouvre le site du journal" /></a>
@@ -84,7 +103,8 @@ function TopicRow({ s, ask, up }) {
   );
 }
 
-export default function Moving({ data, ask, children, period = 'week' }) {
+export default function Moving({ data, ask, children, period = 'week', session }) {
+  const follow = useFollows({ user: session?.user, authToken: session?.authToken });
   const m = useMemo(() => {
     if (period === 'week') return computeMoving(data.points, 'week');
     // The latest day while its collections are still coming in reads as noise: until it
@@ -122,8 +142,8 @@ export default function Moving({ data, ask, children, period = 'week' }) {
         <section aria-labelledby="mv-names">
           <span className="k-eyebrow" id="mv-names">{span === 'week' ? 'Les noms qui reviennent cette semaine' : `Les noms du jour`}</span>
           <div className="k-move-grid">
-            {lead && <NameCard t={lead} ask={ask} span={span} lead />}
-            {others.map(t => <NameCard key={t.label} t={t} ask={ask} span={span} />)}
+            {lead && <NameCard t={lead} ask={ask} span={span} follow={follow} session={session} lead />}
+            {others.map(t => <NameCard key={t.label} t={t} ask={ask} span={span} follow={follow} session={session} />)}
           </div>
         </section>
       )}

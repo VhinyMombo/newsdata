@@ -445,6 +445,12 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-move-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .k-move-card h3 { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.15; margin: 0; overflow-wrap: anywhere; }
 .k-move-card.lead h3 { font-size: clamp(32px, 4vw, 48px); }
+.k-move-card header .k-move-badge { margin-left: auto; }
+.k-move-follow { flex: none; align-self: center; width: 36px; height: 36px; margin: -6px -8px -6px -4px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.k-move-follow:hover { color: var(--green); background: var(--green-soft); }
+.k-move-follow.on { color: var(--green); }
+.k-move-card.lead .k-move-follow { color: var(--pop-on-deep, var(--deep-soft)); }
+.k-move-card.lead .k-move-follow:hover { background: rgba(255, 255, 255, 0.08); }
 .k-move-badge { flex: none; font-size: 12px; font-weight: 600; color: var(--green); background: var(--green-soft); border-radius: 999px; padding: 3px 10px; }
 .k-move-card.lead .k-move-badge { color: var(--deep); background: var(--deep-ink); }
 .k-move-count { margin: 0; font-size: 13px; color: var(--muted); }
