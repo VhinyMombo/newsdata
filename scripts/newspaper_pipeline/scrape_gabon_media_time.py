@@ -51,6 +51,7 @@ ALL_CATEGORIES = [
 ]
 
 FIELDNAMES = ["category", "title", "published_time", "url", "text"]
+GENERIC_CATEGORIES = {"a-la-une", "derniers-articles", "actualites", "non-classe", "uncategorized"}
 
 
 # ---------------------------------------------------------------------------
@@ -131,10 +132,53 @@ def _fetch_article(url: str) -> dict | None:
 # Main logic
 # ---------------------------------------------------------------------------
 
-def scrape_category(category: str, target_dates: set[str]) -> list[dict]:
+def scrape_recent_via_api(target_dates: set[str], known: set[str]) -> list[dict] | None:
+    """The site is WordPress: its REST API lists the period's posts with their
+    links and categories in a request or two, so only the articles not saved yet
+    are opened. None when the API does not answer, to fall back on the crawl."""
+    api = f"{BASE_URL}/wp-json/wp/v2"
+    try:
+        cats = requests.get(f"{api}/categories", params={"per_page": 100, "_fields": "id,slug"},
+                            headers=HEADERS, timeout=15).json()
+        slugs = {c["id"]: c["slug"] for c in cats}
+        posts, page = [], 1
+        while True:
+            r = requests.get(f"{api}/posts", headers=HEADERS, timeout=15, params={
+                "after": f"{min(target_dates)}T00:00:00", "per_page": 100, "page": page,
+                "_fields": "date,link,categories"})
+            if r.status_code == 400:  # past the last page
+                break
+            r.raise_for_status()
+            batch = r.json()
+            posts += batch
+            if len(batch) < 100:
+                break
+            page += 1
+    except Exception as e:
+        print(f"    [API] unavailable ({e}): crawling the categories instead")
+        return None
+
+    rows = []
+    fresh = [p for p in posts if p["link"] not in known and p["date"][:10] in target_dates]
+    print(f"    {len(posts)} posts in the period, {len(fresh)} not saved yet")
+    for p in fresh:
+        article = _fetch_article(p["link"])
+        if article is None:
+            continue
+        # The rubric, not the front-page and "latest" tags every post also carries
+        article["category"] = next((slugs[c] for c in p["categories"] if slugs.get(c) not in GENERIC_CATEGORIES and c in slugs), "actualites")
+        rows.append(article)
+        print(f"    ✓ [{article['published_time'][:10]}] {article['title'][:75]}")
+        time.sleep(0.3)
+    return rows
+
+
+def scrape_category(category: str, target_dates: set[str], known: set[str] = frozenset()) -> list[dict]:
     """
     Paginate through a category, collecting articles whose date matches.
-    Stops after two consecutive pages with zero matches.
+    Stops after two consecutive pages with zero matches, or at the first page
+    whose articles are all in the sheet already: listings run newest first, so
+    the pages after it hold nothing new either.
     """
     rows: list[dict] = []
     seen_urls: set[str] = set()
@@ -153,6 +197,11 @@ def scrape_category(category: str, target_dates: set[str]) -> list[dict]:
 
         new_links = [l for l in links if l not in seen_urls]
         seen_urls.update(new_links)
+        # Opening an article only to learn its date is what made this source slow:
+        # those already saved are skipped without a request
+        if known and not any(l not in known for l in new_links):
+            break
+        new_links = [l for l in new_links if l not in known]
 
         page_matches = 0
         for url in new_links:
@@ -211,9 +260,23 @@ def main() -> None:
     all_articles: list[dict] = []
     seen_urls: set[str] = set()
 
-    for cat in args.categories:
+    from sheets_client import SheetsClient
+    client = SheetsClient()
+    try:
+        known = client.existing_urls("gabonmediatime")
+    except Exception as e:  # without the list, fall back to the full crawl
+        print(f"⚠️  Could not read the saved URLs ({e}): checking every article")
+        known = set()
+    print(f"    {len(known)} articles already saved\n")
+
+    # All categories wanted: one pass over the REST API instead of eleven crawls
+    via_api = scrape_recent_via_api(target_dates, known) if args.categories == ALL_CATEGORIES else None
+    if via_api is not None:
+        all_articles = via_api
+
+    for cat in (args.categories if via_api is None else []):
         print(f"📂 Category: {cat}")
-        cat_rows = scrape_category(cat, target_dates)
+        cat_rows = scrape_category(cat, target_dates, known)
 
         new = 0
         for row in cat_rows:
@@ -232,8 +295,6 @@ def main() -> None:
 
     print(f"{'='*60}")
     print(f"📤 Uploading {len(all_articles)} articles to Google Sheets...")
-    from sheets_client import SheetsClient
-    client = SheetsClient()
     written = client.append_articles("gabonmediatime", all_articles, FIELDNAMES)
     print(f"✅ Done — {written} new rows added to 'gabonmediatime' tab")
 

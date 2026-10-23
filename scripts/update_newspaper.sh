@@ -6,15 +6,21 @@
 #    ./scripts/update_newspaper.sh          # last 3 days (default)
 #    ./scripts/update_newspaper.sh 7        # last 7 days
 #    ./scripts/update_newspaper.sh 20       # last 20 days
+#
+#  MAP=append (environment) adds the new articles to the existing map instead of
+#  recomputing it: seconds instead of a quarter of an hour, and no naming calls.
+#  The server collects hourly that way and redraws the map a few times a day.
 # ============================================================
 
 set -e
 
-# Notify on error
-function on_error() {
-    osascript -e 'display notification "⚠️ Pipeline failed! An error occurred during scraping. Check the logs." with title "Le Kiosque"' || true
-}
+# macOS desktop notifications when run on the Mac; nothing on the server
+notify() { command -v osascript >/dev/null && osascript -e "display notification \"$1\" with title \"Le Kiosque\"" || true; }
+function on_error() { notify "⚠️ Pipeline failed! An error occurred during scraping. Check the logs."; }
 trap on_error ERR
+MAP="${MAP:-full}"
+step_start=$SECONDS
+took() { echo "   ⏱  $(( SECONDS - step_start )) s"; step_start=$SECONDS; }
 
 # Accept both "update_newspaper.sh 7" and "update_newspaper.sh --days 7"
 if [ "$1" = "--days" ]; then
@@ -39,7 +45,7 @@ echo "============================================"
 echo ""
 
 # Trigger macOS desktop notification for start
-osascript -e 'display notification "Pipeline started! Scraping articles for the last '"$DAYS"' days..." with title "Le Kiosque"' || true
+notify "Pipeline started! Scraping articles for the last $DAYS days..."
 
 
 
@@ -61,7 +67,7 @@ SCRAPERS=(
     "scrape_kongossanews.py:kongossanews:Kongossa News"
 )
 
-osascript -e 'display notification "Scraping all sources in parallel..." with title "Le Kiosque"' || true
+notify "Scraping all sources in parallel..."
 echo "📰 [1/3] Scraping ${#SCRAPERS[@]} sources in parallel..."
 
 PIDS=()
@@ -82,18 +88,26 @@ for i in "${!SCRAPERS[@]}"; do
 done
 
 echo "✅ All scraping finished successfully."
+took
 echo ""
 
 # Step 7: Rebuild ChromaDB
-osascript -e 'display notification "Building ChromaDB vector database..." with title "Le Kiosque"' || true
+notify "Building ChromaDB vector database..."
 echo "🗄️  [2/3] Building ChromaDB from Google Sheets..."
 $PYTHON "$DIR/scripts/newspaper_pipeline/create_newspaper_db.py"
+took
 echo ""
 
 # Step 8: Export embeddings for the frontend visualization
-osascript -e 'display notification "Exporting embeddings for visualization..." with title "Le Kiosque"' || true
-echo "📊 [3/3] Exporting embeddings for visualization..."
-$PYTHON "$DIR/scripts/export_embeddings.py"
+notify "Exporting embeddings for visualization..."
+if [ "$MAP" = "append" ]; then
+    echo "📊 [3/3] Adding the new articles to the map..."
+    $PYTHON "$DIR/scripts/export_embeddings.py" --append
+else
+    echo "📊 [3/3] Exporting embeddings for visualization..."
+    $PYTHON "$DIR/scripts/export_embeddings.py"
+fi
+took
 echo ""
 
 echo "============================================"
@@ -101,8 +115,7 @@ echo "✅ Pipeline complete!"
 echo "  End Time: $(date)"
 echo "============================================"
 
-# Trigger macOS desktop notification
-osascript -e 'display notification "Pipeline completed successfully! New articles have been scraped and the database is updated." with title "Le Kiosque"' || true
+notify "Pipeline completed successfully! New articles have been scraped and the database is updated."
 
 
 

@@ -106,6 +106,10 @@ class SheetsClient:
         except Exception:
             return set()
 
+    def existing_urls(self, tab_name: str) -> set[str]:
+        """URLs already saved in a tab, so a scraper can skip fetching them again."""
+        return self._existing_urls(self._get_or_create_tab(tab_name))
+
     def append_articles(
         self,
         tab_name: str,

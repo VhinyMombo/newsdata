@@ -4,12 +4,14 @@ Extract embeddings from ChromaDB, calculate UMAP & PCA 2D/3D projections,
 and export the results to a JSON file for the React frontend to consume.
 
 Usage:
-    python scripts/export_embeddings.py
+    python scripts/export_embeddings.py            # recompute the whole map
+    python scripts/export_embeddings.py --append   # add the new articles to it
 """
 
 import json
 import re
 import time
+from collections import Counter
 from pathlib import Path
 
 import os
@@ -118,6 +120,67 @@ def name_in_groups(namer, clusters, sample_titles, cluster_names) -> None:
         time.sleep(NAMING_PAUSE)
 
 
+# A new article sits where its nearest articles already are, in their theme
+K_NEIGHBOURS = 10
+
+
+def make_point(id_, meta, doc, cluster_name, projections) -> dict:
+    # Format document snippet for hover tooltips
+    doc_snippet = "<br>".join(doc[j:j+80] for j in range(0, min(len(doc), 400), 80))
+    if len(doc) > 400:
+        doc_snippet += "..."
+    return {
+        "id": id_,
+        "title": meta.get("title", ""),
+        "date": meta.get("published_time", "")[:10],
+        "category": meta.get("category", "unknown"),
+        "source": meta.get("source", "unknown"),
+        "cluster_name": cluster_name,
+        "url": meta.get("source_url", ""),
+        "snippet": doc_snippet,
+        "projections": projections,
+    }
+
+
+def write_export(export_data) -> None:
+    # Serialised first, then written in one go into the same file: nginx mounts
+    # data.json itself, so a rename would leave it serving the old file
+    print(f"Writing to {OUTPUT_FILE}...")
+    payload = json.dumps(export_data, ensure_ascii=False)
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write(payload)
+
+
+def append_new(data) -> bool:
+    """Add the articles indexed since the last full export to the existing map,
+    each placed at the mean position of its nearest neighbours and given their
+    most common theme. Seconds, and no naming calls; the next full export redraws
+    everything. False when there is no map yet to add to."""
+    if not OUTPUT_FILE.exists():
+        return False
+    with open(OUTPUT_FILE, encoding="utf-8") as f:
+        export_data = json.load(f)
+    pos = {p["id"]: i for i, p in enumerate(export_data["points"])}
+    new = [i for i, id_ in enumerate(data["ids"]) if id_ not in pos]
+    old = np.array([i for i, id_ in enumerate(data["ids"]) if id_ in pos])
+    print(f"{len(new)} new articles for a map of {len(pos)}.")
+    if not new or not len(old):
+        return bool(len(old))
+    X = np.array(data["embeddings"], dtype=np.float32)
+    X /= np.linalg.norm(X, axis=1, keepdims=True)
+    for i in new:
+        nearest = old[np.argsort(-(X[old] @ X[i]))[:K_NEIGHBOURS]]
+        pts = [export_data["points"][pos[data["ids"][j]]] for j in nearest]
+        theme = Counter(p["cluster_name"] for p in pts).most_common(1)[0][0]
+        projections = {k: [float(v) for v in np.mean([p["projections"][k] for p in pts], axis=0)]
+                       for k in pts[0]["projections"]}
+        export_data["points"].append(make_point(data["ids"][i], data["metadatas"][i], data["documents"][i], theme, projections))
+    export_data["metadata"]["total_articles"] = len(export_data["points"])
+    write_export(export_data)
+    print("✅ Export complete!")
+    return True
+
+
 def main() -> None:
     if not PERSIST_DIR.exists():
         print(f"❌ Error: Database not found at {PERSIST_DIR}")
@@ -147,6 +210,9 @@ def main() -> None:
         print("❌ Error: No embeddings found in collection.")
         return
         
+    if "--append" in sys.argv and append_new(data):
+        return
+
     X = np.array(data["embeddings"], dtype=np.float32)
     n_samples = len(X)
     print(f"Loaded {n_samples} embeddings.")
@@ -208,37 +274,15 @@ def main() -> None:
     }
 
     for i in range(n_samples):
-        meta = data["metadatas"][i]
-        
-        # Format document snippet for hover tooltips
-        doc = data["documents"][i]
-        doc_snippet = "<br>".join(doc[j:j+80] for j in range(0, min(len(doc), 400), 80))
-        if len(doc) > 400:
-            doc_snippet += "..."
-            
-        c_id = cluster_labels[i]
-            
-        point = {
-            "id": data["ids"][i],
-            "title": meta.get("title", ""),
-            "date": meta.get("published_time", "")[:10],
-            "category": meta.get("category", "unknown"),
-            "source": meta.get("source", "unknown"),
-            "cluster_name": cluster_names[c_id],
-            "url": meta.get("source_url", ""),
-            "snippet": doc_snippet,
-            "projections": {
+        export_data["points"].append(make_point(
+            data["ids"][i], data["metadatas"][i], data["documents"][i], cluster_names[cluster_labels[i]], {
                 "PCA_2D": [float(pca2[i][0]), float(pca2[i][1])],
                 "PCA_3D": [float(pca3[i][0]), float(pca3[i][1]), float(pca3[i][2])],
                 "UMAP_2D": [float(umap2[i][0]), float(umap2[i][1])],
-                "UMAP_3D": [float(umap3[i][0]), float(umap3[i][1]), float(umap3[i][2])]
-            }
-        }
-        export_data["points"].append(point)
+                "UMAP_3D": [float(umap3[i][0]), float(umap3[i][1]), float(umap3[i][2])],
+            }))
 
-    print(f"Writing to {OUTPUT_FILE}...")
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(export_data, f, ensure_ascii=False)
+    write_export(export_data)
         
     print("✅ Export complete!")
 
