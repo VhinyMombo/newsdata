@@ -139,8 +139,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
 
   return (
     <div className="auth-modal-backdrop" onClick={onClose}>
-      <div className="auth-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
-        <button className="auth-modal-close" onClick={onClose} aria-label="Fermer">✕</button>
+      <div className={`auth-modal ${mode !== 'profile' ? 'auth-modal-entry' : ''}`} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <button className="auth-modal-close" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
 
         {mode !== 'profile' ? (
           <form
@@ -152,7 +152,17 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                 : { email, password });
             }}
           >
-            <h2 className="auth-title">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
+            <header className="auth-brand">
+              <img src="/icons/icon-192.png" alt="" width="56" height="56" />
+              <span className="auth-brand-name">Le Kiosque</span>
+              <span className="auth-brand-rule" aria-hidden="true" />
+              <p className="auth-brand-dek">La presse et les lois, à portée de question.</p>
+            </header>
+            <div className="auth-tabs" role="tablist" aria-label="Compte">
+              <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'on' : ''} onClick={() => onSwitchMode('login')}>Se connecter</button>
+              <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'on' : ''} onClick={() => onSwitchMode('register')}>Créer un compte</button>
+            </div>
+            <h2 className="sr-only">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
             {/* Said in both modes: the header button opens "Se connecter", where most
             visitors have no account yet */}
             <ul className="auth-perks">
@@ -179,12 +189,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
             <button type="submit" className="auth-submit" disabled={busy}>
               {busy ? '…' : mode === 'register' ? 'Créer le compte' : 'Se connecter'}
             </button>
-            <button
-              type="button" className="auth-switch"
-              onClick={() => onSwitchMode(mode === 'register' ? 'login' : 'register')}
-            >
-              {mode === 'register' ? 'Déjà un compte ? Se connecter' : "Pas de compte ? En créer un"}
-            </button>
+            <p className="auth-fineprint">Gratuit. Votre e-mail sert seulement à vous connecter.</p>
           </form>
         ) : (
           <div className="auth-profile">

@@ -249,3 +249,22 @@
 .auth-perks li { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; font-size: 0.86rem; line-height: 1.45; color: var(--text-2); }
 .auth-perks svg { margin-top: 2px; color: var(--accent); }
 .auth-perks b { color: var(--text); font-weight: 600; }
+
+/* ── Sign-in / sign-up: the paper's masthead on top, then the two tabs ── */
+.auth-modal-entry { padding: 0 0 24px; border-top: 4px solid var(--pop, var(--accent)); max-height: 92dvh; }
+.auth-modal-entry .auth-form { padding: 0 24px; margin-bottom: 0; gap: 12px; }
+.auth-modal-close { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; top: 10px; right: 10px; }
+.auth-modal-close:hover { background: var(--accent-glow); }
+.auth-brand { display: grid; justify-items: center; text-align: center; margin: 0 -24px 6px; padding: 28px 24px 22px; background: var(--hero, var(--panel-alt)); border-bottom: 1px solid var(--border); }
+.auth-brand img { width: 56px; height: 56px; border-radius: 14px; box-shadow: 0 6px 18px rgba(15, 42, 58, 0.16); }
+.auth-brand-name { margin-top: 12px; font: 600 1.6rem/1.1 var(--serif); color: var(--text); }
+.auth-brand-rule { width: 96px; height: 2px; margin-top: 8px; background: var(--pop, var(--accent)); }
+.auth-brand-dek { margin-top: 10px; font: 400 0.98rem/1.4 var(--serif); color: var(--text-2); }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--panel-alt); }
+.auth-tabs button { min-height: 40px; border-radius: 7px; font: 500 0.88rem/1 var(--sans); color: var(--text-3); }
+.auth-tabs button.on { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(15, 42, 58, 0.12); }
+.auth-modal-entry .auth-perks { margin: 0; }
+/* 16px fields: iOS zooms the page on anything smaller */
+.auth-modal-entry .auth-input { min-height: 48px; font-size: 16px; border-radius: 10px; }
+.auth-modal-entry .auth-submit { min-height: 50px; font-size: 0.98rem; border-radius: 10px; margin-top: 2px; }
+.auth-fineprint { text-align: center; font-size: 0.78rem; color: var(--text-3); }
