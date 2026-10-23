@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { track } from '../utils/track';
 
 // Where the visitor opened the link decides how Le Kiosque gets onto the home screen:
 // Chrome on Android hands us its install dialog, Safari on iPhone only has its share
@@ -26,7 +27,7 @@ export function useInstall() {
 
   useEffect(() => {
     const onReady = () => setPrompt(window.__kiosqueInstall || null);
-    const onInstalled = () => { window.__kiosqueInstall = null; setPrompt(null); setInstalled(true); };
+    const onInstalled = () => { window.__kiosqueInstall = null; setPrompt(null); setInstalled(true); track('installation', { plateforme: PLATFORM }); };
     window.addEventListener('kiosque-installable', onReady);
     window.addEventListener('appinstalled', onInstalled);
     return () => {
@@ -38,6 +39,7 @@ export function useInstall() {
   // The dialog can be shown only once per event: forget it whatever the answer
   const install = useCallback(async () => {
     if (!prompt) return false;
+    track('installation-demandee', { plateforme: PLATFORM });
     prompt.prompt();
     const { outcome } = await prompt.userChoice;
     window.__kiosqueInstall = null;

@@ -1,6 +1,7 @@
 # Environments
 .env
 .env.docker
+.env.umami
 .venv
 env/
 venv/

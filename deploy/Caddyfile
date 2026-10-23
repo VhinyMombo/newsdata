@@ -11,3 +11,9 @@
 		header_up -Cf-Connecting-Ip
 	}
 }
+
+# Umami, the visitor statistics
+{$STATS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy umami:3000
+}

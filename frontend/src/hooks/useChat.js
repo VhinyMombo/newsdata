@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { track } from '../utils/track';
 import { API_URL, errorDetail, postJSON, readStream } from '../utils/api';
 import { acquire, isBusy, release } from '../utils/lock';
 
@@ -42,6 +43,7 @@ export function useChat({ setApiStatus }) {
     if (!acquire()) return;
     if (newThread) chatRef.current = [];
     const c = corpusOverride || corpus;
+    track('question', { rubrique: c === 'codes' ? 'lois' : 'actualite', origine: pinned ? 'article' : existingIdx !== null ? 'relance' : 'saisie' });
     if (existingIdx !== null) pinned = pinned || chatRef.current[existingIdx]?.pinned || null;
     setSearching(true);
     const controller = new AbortController();

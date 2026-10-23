@@ -3,6 +3,7 @@ import { Download, RefreshCw } from 'lucide-react';
 import { AnswerText, ReportSkeleton, Thinking } from '../utils/text';
 import { longDate } from '../utils/format';
 import { go } from '../hooks/useRoute';
+import { track } from '../utils/track';
 
 const TABS = [
   ['jour', 'Le point du jour'],
@@ -73,7 +74,7 @@ export default function Editions({ reports, sub }) {
             <div className="k-edition-actions">
               {!reportLoading && report && !viewingArchive && (
                 <>
-                  <a className="k-btn ghost" href={pdfUrl} target="_blank" rel="noreferrer"><Download size={14} /> PDF</a>
+                  <a className="k-btn ghost" href={pdfUrl} target="_blank" rel="noreferrer" onClick={() => track('pdf', { edition: reportKind })}><Download size={14} /> PDF</a>
                   <button className="k-btn ghost" onClick={() => fetchReport(reportKind)}><RefreshCw size={13} /> Relancer</button>
                 </>
               )}

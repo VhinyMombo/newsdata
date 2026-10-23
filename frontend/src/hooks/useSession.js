@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { track } from '../utils/track';
 import { API_URL, authHeaders } from '../utils/api';
 
 const TOKEN_KEY = 'lekiosque_auth_token';
@@ -36,6 +37,7 @@ export function useSession() {
       localStorage.setItem(TOKEN_KEY, body.token);
       setAuthToken(body.token);
       setUser(body.user);
+      if (mode === 'register') track('inscription');
       setAuthModal(null);
     } catch (e) {
       setAuthError(e.message);

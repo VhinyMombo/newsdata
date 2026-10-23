@@ -5,7 +5,8 @@
 #
 # On top of the base file: Caddy in front for HTTPS (Let's Encrypt), Ollama in
 # a container for the embeddings only (the chat model is a hosted API, see
-# llm.py), and nothing but ports 80/443 published.
+# llm.py), Umami for visitor statistics on stats.hodologic.fr, and nothing but
+# ports 80/443 published.
 
 services:
   api:
@@ -37,6 +38,7 @@ services:
       - "443:443/udp"
     environment:
       KIOSQUE_DOMAIN: ${KIOSQUE_DOMAIN:-lekiosque.hodologic.fr}
+      STATS_DOMAIN: ${STATS_DOMAIN:-stats.hodologic.fr}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -44,6 +46,30 @@ services:
     depends_on:
       - web
 
+  # Audience statistics without cookies. Secrets (DATABASE_URL, APP_SECRET and
+  # POSTGRES_PASSWORD) live in .env.umami on the server, never in the repo.
+  umami:
+    image: ghcr.io/umami-software/umami:3.3.1
+    restart: unless-stopped
+    env_file: .env.umami
+    environment:
+      # Served as /k.js rather than /script.js, which ad blockers drop by name
+      TRACKER_SCRIPT_NAME: k.js
+      DISABLE_TELEMETRY: "1"
+    depends_on:
+      - umami-db
+
+  umami-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env.umami
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+    volumes:
+      - umami-db:/var/lib/postgresql/data
+
 volumes:
   caddy-data:
   caddy-config:
+  umami-db:

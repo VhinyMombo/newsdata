@@ -145,3 +145,28 @@ Tout se règle dans `.env.docker`, puis `$DC up -d api` :
 | Gemini Flash Lite (réglage actuel) | `LLM_MODEL=gemini-flash-lite-latest`, `LLM_REASONING_EFFORT=minimal` |
 | Gemini Flash, plus fouillé | `LLM_MODEL=gemini-3.8-flash`, `LLM_REASONING_EFFORT=none` : 20 requêtes par jour en gratuit, à réserver à une clé avec facturation |
 | Revenir au modèle local | `LLM_PROVIDER=ollama` : 45 à 75 s par réponse avec qwen3:1.7b sur 2 processeurs, plusieurs minutes avec qwen3.5:9b |
+
+## Statistiques de visite (Umami)
+
+Umami tourne à côté du site, sur `stats.hodologic.fr`, sans cookies. Il faut un
+enregistrement **A** `stats` vers l'IP du serveur, puis, sur le serveur :
+
+```bash
+cd ~/lekiosque
+# Secrets générés sur place, jamais dans le dépôt
+umask 077
+P=$(openssl rand -hex 24)
+printf "POSTGRES_PASSWORD=%s\nDATABASE_URL=postgresql://umami:%s@umami-db:5432/umami\nAPP_SECRET=%s\n" \
+  "$P" "$P" "$(openssl rand -hex 32)" > .env.umami
+$DC up -d umami-db umami && $DC up -d --force-recreate caddy
+```
+
+Umami crée un compte `admin` / `umami` : changez ce mot de passe tout de suite
+(Paramètres › Profil), le tableau de bord étant public. Ajoutez ensuite le site
+`lekiosque.hodologic.fr` et reportez son identifiant dans `data-website-id`
+(`frontend/index.html`).
+
+Le site envoie, en plus des pages vues : `question` (rubrique, origine),
+`comparaison`, `installation-demandee`, `installation`, `inscription` et `pdf`.
+Chaque visite indique si elle vient du navigateur ou de l'application installée
+(`affichage`).

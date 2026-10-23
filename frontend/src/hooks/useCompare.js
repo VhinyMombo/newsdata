@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { track } from '../utils/track';
 import { errorDetail, postJSON, readStream } from '../utils/api';
 import { acquire, release } from '../utils/lock';
 
@@ -89,6 +90,7 @@ export function useCompare({ gabonToday }) {
     const ps = periods(preset);
     if (ps.some(p => !p.start || !p.end)) return false;
     if (!acquire()) return false;
+    track('comparaison', { periode: preset });
     const runId = ++runIdRef.current;
     stopRef.current = false;
     setStopping(false);
