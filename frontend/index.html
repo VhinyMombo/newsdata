@@ -89,11 +89,28 @@
       });
     </script>
     <!-- Visitor statistics (Umami, stats.hodologic.fr): no cookies, production only.
-    The app routes by #hash, which the tracker does not follow on its own: each
-    change of rubrique counts as a page view. Sessions say whether the visitor
-    reads in the browser or in the installed app. -->
-    <script defer src="https://stats.hodologic.fr/k.js" data-website-id="7fd5d389-56b5-46e4-b114-63b2dfc6892a" data-domains="lekiosque.hodologic.fr"
-      onload="var s=window.navigator.standalone||matchMedia('(display-mode: standalone)').matches;umami.identify({affichage:s?'application':'navigateur'});addEventListener('hashchange',function(){umami.track()})"></script>
+    The app routes by #hash, which the tracker neither follows nor records: each
+    change of rubrique counts as a page view, filed under its path (#/editions as
+    /editions). The tag says whether the visit is in the browser or the installed app. -->
+    <script>
+      (function () {
+        window.__kiosqueStats = function (type, payload) {
+          var view = location.hash.replace(/^#\/?/, '').split('?')[0];
+          if (view && payload.url) payload.url = location.origin + '/' + view;
+          return payload;
+        };
+        var app = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+        var s = document.createElement('script');
+        s.defer = true;
+        s.src = 'https://stats.hodologic.fr/k.js';
+        s.dataset.websiteId = '7fd5d389-56b5-46e4-b114-63b2dfc6892a';
+        s.dataset.domains = 'lekiosque.hodologic.fr';
+        s.dataset.beforeSend = '__kiosqueStats';
+        s.dataset.tag = app ? 'application' : 'navigateur';
+        document.head.appendChild(s);
+        window.addEventListener('hashchange', function () { if (window.umami) window.umami.track(); });
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

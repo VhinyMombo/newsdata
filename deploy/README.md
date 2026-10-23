@@ -168,5 +168,5 @@ Umami crée un compte `admin` / `umami` : changez ce mot de passe tout de suite
 
 Le site envoie, en plus des pages vues : `question` (rubrique, origine),
 `comparaison`, `installation-demandee`, `installation`, `inscription` et `pdf`.
-Chaque visite indique si elle vient du navigateur ou de l'application installée
-(`affichage`).
+Chaque visite porte l'étiquette (*tag*) `navigateur` ou `application`, selon
+qu'elle vient du navigateur ou de l'application installée.
