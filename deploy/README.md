@@ -191,3 +191,19 @@ docker cp /tmp/r/reports_archive.db "$($DC ps -q api)":/data/reports_archive.db
 $DC exec -u root api chown -R 10001:10001 /data && $DC restart api
 gunzip -c /tmp/r/umami.sql.gz | $DC exec -T umami-db psql -U umami -d umami
 ```
+
+## Connexion avec Google et Facebook
+
+`oauth.py` mène la connexion côté serveur, sans SDK dans la page. Clés dans
+`.env.docker` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_APP_ID`,
+`FACEBOOK_APP_SECRET`), puis `$DC up -d api`. Adresses de retour déclarées chez
+chacun : `https://lekiosque.hodologic.fr/api/auth/{google,facebook}/callback`.
+
+- Google : projet « Le Kiosque » (Google Auth Platform), publié, marque vérifiée.
+- Facebook : app « Le Kiosque » (ID 1888717179172677), non publiée tant que Meta
+  n'a pas fait la vérification d'entreprise et l'examen de l'app. D'ici là le
+  bouton n'apparaît qu'aux testeurs, qui ouvrent une fois `#/tester-facebook`.
+  Après validation : `FACEBOOK_LIVE=1` dans `.env.docker`, puis `$DC up -d api`.
+
+Depuis l'app installée, la page du fournisseur s'ouvre dans une fenêtre à part :
+l'app attend le résultat (`/auth/app-wait`) au lieu d'être redirigée.
