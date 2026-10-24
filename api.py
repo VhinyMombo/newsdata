@@ -388,6 +388,8 @@ Règles impératives :
 - Reproduis fidèlement le sens des dispositions ; ne reformule jamais de façon approximative.
 - N'invente aucune disposition et n'utilise aucune connaissance extérieure aux extraits fournis.
 - Si les extraits fournis ne couvrent pas la question, dis-le clairement plutôt que d'extrapoler.
+- Tu peux comparer et calculer à partir des chiffres des extraits, même s'ils viennent de textes différents (loi de finances 2026 et projet de loi de finances 2027) : donne chaque chiffre avec son article, puis l'écart. Précise que le projet 2027 n'est pas encore adopté.
+- Si les extraits ne couvrent qu'une partie de la question, réponds sur cette partie et dis ce qui manque.
 - Termine par : 'Ces informations sont données à titre documentaire et ne constituent pas un conseil juridique.'
 
 Rédaction :
@@ -475,6 +477,7 @@ def build_codes_prompt(question: str, extracts: list["ContextArticle"]) -> str:
         "RÈGLES STRICTES :\n"
         "- Réponds uniquement à partir des extraits de codes ci-dessous.\n"
         "- Cite le numéro d'article pour chaque affirmation.\n"
+        "- Comparer ou calculer à partir des chiffres des extraits est permis.\n"
         "- Si les extraits ne couvrent pas la question, dis-le en une phrase.\n\n"
         f"=== EXTRAITS DES CODES ===\n{context}\n=== FIN DES EXTRAITS ===\n\n"
         f"Rappel de la question : {question}\n\n"
