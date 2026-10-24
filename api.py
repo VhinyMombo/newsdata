@@ -778,8 +778,13 @@ def _back_to_app(**params: str) -> RedirectResponse:
 
 
 @app.get("/auth/providers")
-def auth_providers():
-    return {"providers": oauth.configured()}
+def auth_providers(test: str = ""):
+    # Facebook stays hidden until Meta has reviewed the app (FACEBOOK_LIVE=1): until
+    # then only its testers, who open #/tester-facebook once, see the button
+    shown = oauth.configured()
+    if os.getenv("FACEBOOK_LIVE") != "1" and test != "facebook":
+        shown = [p for p in shown if p != "facebook"]
+    return {"providers": shown}
 
 
 def _sheet_page(title: str, text: str) -> HTMLResponse:

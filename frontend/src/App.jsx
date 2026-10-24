@@ -46,6 +46,13 @@ export default function App() {
     window.history.replaceState(null, '', '#/');
   }, [route, openReset]);
 
+  // #/tester-facebook, opened once on a tester's phone, shows the Facebook button before Meta's review
+  useEffect(() => {
+    if (route.view !== 'tester-facebook') return;
+    try { localStorage.setItem('lekiosque_tester', 'facebook'); } catch { /* private mode */ }
+    window.location.replace('/');
+  }, [route]);
+
   // Back from Google or Facebook: sign in with the one-time code, or say what went wrong
   const { exchange, showAuthError } = session;
   useEffect(() => {

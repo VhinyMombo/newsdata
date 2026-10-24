@@ -17,7 +17,9 @@ export function useSession() {
   const [providers, setProviders] = useState([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/auth/providers`)
+    let tester = false;
+    try { tester = localStorage.getItem('lekiosque_tester') === 'facebook'; } catch { /* no storage: no tester */ }
+    fetch(`${API_URL}/auth/providers${tester ? '?test=facebook' : ''}`)
       .then(r => (r.ok ? r.json() : { providers: [] }))
       .then(d => setProviders(d.providers || []))
       .catch(() => setProviders([]));
