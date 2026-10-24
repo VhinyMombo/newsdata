@@ -548,6 +548,6 @@ def delete_user(user_id: int) -> None:
     """Erase the account and everything attached to it, at the reader's request."""
     with _conn() as conn:
         for table in ("sessions", "follows", "push_subscriptions", "password_resets",
-                      "conversations", "identities", "login_codes"):
+                      "conversations", "identities", "login_codes", "app_logins"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
