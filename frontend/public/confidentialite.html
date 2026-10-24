@@ -11,6 +11,8 @@
   body { margin: 0; background: #fff; color: var(--ink); font: 400 17px/1.6 Georgia, 'Iowan Old Style', serif; }
   main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
   a { color: var(--pop); }
+  .back { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; margin-bottom: 20px; border: 1px solid var(--rule); border-radius: 10px; color: var(--pop); font: 600 15px/1 system-ui, sans-serif; text-decoration: none; }
+  .back.end { margin: 40px 0 0; }
   .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); font-size: 1.3rem; font-weight: 600; }
   .brand img { border-radius: 8px; }
   h1 { font-weight: 400; font-size: 2rem; line-height: 1.2; margin: 32px 0 8px; }
@@ -24,6 +26,8 @@
 </head>
 <body>
 <main>
+  <!-- The installed app has no browser back button: this page gives its own way back -->
+  <a class="back" href="/">← Retour au Kiosque</a>
   <a class="brand" href="/"><img src="/icons/icon-192.png" alt="" width="36" height="36">Le Kiosque</a>
   <h1>Confidentialité</h1>
   <p class="date">Le Kiosque est édité par Hodologic. Mis à jour le 24 octobre 2026.</p>
@@ -56,6 +60,16 @@
 
   <h2>Une question</h2>
   <p>Écrivez-nous à <a href="mailto:lekiosquefr@googlegroups.com">lekiosquefr@googlegroups.com</a>.</p>
+
+  <a class="back end" href="/">← Retour au Kiosque</a>
 </main>
+<script>
+  // Back to where the reader was (the open profile, an answer) when they came from the app
+  document.querySelectorAll('.back').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      if (history.length > 1 && document.referrer.indexOf(location.origin) === 0) { e.preventDefault(); history.back(); }
+    });
+  });
+</script>
 </body>
 </html>
