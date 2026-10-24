@@ -30,8 +30,12 @@ function withCitations(str, sources, key) {
   });
 }
 
+// No italics in the app: a single-asterisk *aside* is shown as plain text, not
+// with its asterisks, while **bold** is kept
+const dropItalics = (str) => str.replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?![*\w])/g, '$1$2');
+
 function formatInline(str, sources) {
-  const parts = keepNumbersWhole(str).split(/\*\*(.+?)\*\*/g);
+  const parts = keepNumbersWhole(dropItalics(str)).split(/\*\*(.+?)\*\*/g);
   return parts.flatMap((p, i) => (i % 2 ? [<strong key={i}>{withCitations(p, sources, i)}</strong>] : [].concat(withCitations(p, sources, i))));
 }
 

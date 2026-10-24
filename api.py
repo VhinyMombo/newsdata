@@ -370,6 +370,7 @@ de la conversation, mais fonde ta réponse sur les articles fournis.
 Rédaction :
 - Donne une réponse détaillée, structurée et informative en français.
 - Utilise des paragraphes et des listes à puces si approprié.
+- N'utilise jamais l'italique (pas d'astérisque simple autour d'un mot) ; le gras est permis.
 - Mentionne les dates clés des événements.
 - Cite tes sources dans le texte : après chaque information, indique entre crochets le \
 numéro de l'article d'où elle vient, par exemple [1], ou [2][3] si plusieurs articles la \
@@ -395,6 +396,7 @@ Règles impératives :
 Rédaction :
 - Réponse claire et structurée en français, accessible à un non-juriste.
 - Utilise des listes à puces pour énumérer des conditions ou sanctions.
+- N'utilise jamais l'italique (pas d'astérisque simple autour d'un mot) ; le gras est permis.
 """
 
 
