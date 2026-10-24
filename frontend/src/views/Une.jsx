@@ -130,7 +130,9 @@ export default function Une({ ask, session, corpus, health, reports }) {
           <span className="k-eyebrow">{edition}</span>
           <h1 className="k-display">Ce que dit la presse gabonaise, <em>aujourd'hui</em></h1>
           <p className="k-dek">
-            {today ? `${today.count} articles de ${today.sources} journaux, rassemblés chaque jour.` : 'Les articles des journaux gabonais, rassemblés chaque jour.'}
+            {today
+              ? `${today.count} articles de ${today.sources} journaux ${isToday ? 'depuis ce matin' : 'ce jour-là'}, mis à jour toutes les heures.`
+              : 'Les articles des journaux gabonais, mis à jour toutes les heures.'}
             {' '}Parcourez l'essentiel ou posez une question : chaque réponse cite les articles d'où elle vient.
           </p>
           <AskBox ask={ask} />
