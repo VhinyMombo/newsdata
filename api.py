@@ -783,8 +783,10 @@ def auth_providers():
 
 
 def _sheet_page(title: str, text: str) -> HTMLResponse:
-    """Shown in the browser sheet the installed app opened: the app, underneath,
-    has already picked up the result; the reader only has to close the sheet."""
+    """The end of a sign-in started from the installed app. In a browser sheet over
+    the app, the app underneath has the result and the reader closes the sheet. When
+    iPhone brings the page back inside the app itself, the page finds the app's
+    secret in storage, collects the session and returns to the front page."""
     return HTMLResponse(f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} · Le Kiosque</title></head>
 <body style="margin:0;font:17px/1.55 Georgia,serif;color:#0F2A3A;background:#fff">
@@ -792,8 +794,22 @@ def _sheet_page(title: str, text: str) -> HTMLResponse:
 <img src="/icons/icon-192.png" width="64" height="64" alt="" style="border-radius:14px">
 <h1 style="font-weight:400;font-size:1.6rem;margin:20px 0 10px">{title}</h1>
 <p style="color:#34495A">{text}</p>
-<p style="margin-top:28px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche pour revenir au Kiosque.</p>
-</main></body></html>""")
+<p id="close" style="margin-top:28px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche pour revenir au Kiosque.</p>
+<p><a href="/" style="display:inline-block;margin-top:8px;padding:12px 20px;border-radius:10px;background:#7A1F2B;color:#fff;text-decoration:none;font:600 15px/1 system-ui,sans-serif">Revenir au Kiosque</a></p>
+</main>
+<script>
+(function () {{
+  var secret; try {{ secret = localStorage.getItem('lekiosque_app_wait'); }} catch (e) {{}}
+  if (!secret) return;
+  document.getElementById('close').textContent = 'Retour au Kiosque…';
+  fetch('/api/auth/app-wait?app=' + encodeURIComponent(secret)).then(function (r) {{ return r.json(); }}).then(function (b) {{
+    if (b.status === 'ok') localStorage.setItem('lekiosque_auth_token', b.token);
+  }}).catch(function () {{}}).then(function () {{
+    try {{ localStorage.removeItem('lekiosque_app_wait'); }} catch (e) {{}}
+    location.replace('/');
+  }});
+}})();
+</script></body></html>""")
 
 
 @app.get("/auth/{provider}/start")

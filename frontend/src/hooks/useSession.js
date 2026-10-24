@@ -104,6 +104,8 @@ export function useSession() {
   const signInFromApp = useCallback((provider) => {
     const bytes = crypto.getRandomValues(new Uint8Array(24));
     const secret = btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, c => ({ '+': '-', '/': '_', '=': '' }[c]));
+    // Kept for the end page in case iPhone brings it back inside the app (see api.py _sheet_page)
+    try { localStorage.setItem('lekiosque_app_wait', secret); } catch { /* private mode: the waiting below still works */ }
     window.open(`${API_URL}/auth/${provider}/start?app=${secret}`, '_blank');
     clearInterval(waitRef.current);
     setAuthError('');
@@ -117,6 +119,7 @@ export function useSession() {
         if (body.status === 'pending') return;
         clearInterval(waitRef.current);
         setAuthBusy(false);
+        try { localStorage.removeItem('lekiosque_app_wait'); } catch { /* nothing kept */ }
         if (body.status === 'ok') {
           localStorage.setItem(TOKEN_KEY, body.token);
           setAuthToken(body.token);
