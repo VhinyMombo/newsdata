@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
 import { API_URL, authHeaders } from '../utils/api';
 import { clock, longDate, sourceLabel } from '../utils/format';
 import { computeFollowDeltas } from '../utils/categories';
@@ -40,18 +40,26 @@ function explain(ask, a) {
   };
 }
 
-// An article: the whole card is the link, and the mark says the assistant opens it
+// An article: the whole card opens the assistant (the mark says so), and
+// "Lire l'article" opens the original on the newspaper's site
 function Story({ a, ask, size = 'm', lede = true }) {
   const t = clock(a.time);
   return (
-    <a className={`k-story k-story-${size}`} href="#/assistant" onClick={explain(ask, a)}>
-      <h3>{a.title}</h3>
-      {lede && a.lede && <p className="k-lede">{a.lede}</p>}
+    <article className={`k-story k-story-${size}`}>
+      <a className="k-story-ask" href="#/assistant" onClick={explain(ask, a)}>
+        <h3>{a.title}</h3>
+        {lede && a.lede && <p className="k-lede">{a.lede}</p>}
+      </a>
       <p className="k-meta">
         <span className="k-src">{sourceLabel(a.source)}</span>{t && <> · <time>{t}</time></>}
+        {a.url && (
+          <a className="k-story-read" href={a.url} target="_blank" rel="noopener" aria-label={`Lire l'article sur le site de ${sourceLabel(a.source)}`}>
+            Lire l'article<ArrowUpRight size={13} aria-hidden="true" />
+          </a>
+        )}
         <Sparkles size={14} aria-label="expliqué par l'assistant" />
       </p>
-    </a>
+    </article>
   );
 }
 
