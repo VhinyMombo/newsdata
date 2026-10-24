@@ -385,6 +385,14 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 16px; font-size: 0.86rem; color: var(--green); }
 .k-code-article .k-kicker { color: var(--green); margin-bottom: 8px; }
 .k-code-text { white-space: pre-line; font-size: 1.04rem; line-height: 1.8; max-width: var(--read); }
+.k-code-text p + p { margin-top: 0.9em; }
+/* Finance-law tables: scroll sideways inside their frame, never the page */
+.k-code-table { margin: 1em 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; white-space: normal; }
+.k-code-table table { border-collapse: collapse; font-size: 0.86rem; line-height: 1.4; min-width: 100%; }
+.k-code-table th, .k-code-table td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+.k-code-table th { background: var(--bg-alt); font-weight: 600; }
+.k-code-table td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.k-code-table tr:last-child td { border-bottom: 0; }
 
 /* ── Smaller screens ──────────────────────────────────────── */
 @media (max-width: 1080px) {

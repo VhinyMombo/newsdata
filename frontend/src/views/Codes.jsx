@@ -2,6 +2,33 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronLeft, ExternalLink, Search } from 'lucide-react';
 import { Thinking } from '../utils/text';
 
+// An article's text: paragraphs, and the tables of finance laws (rates, budget by
+// mission) that come as Markdown rows ("| a | b |") so they stay tables
+const NUMBER = /^-?[\d\s.,]+%?$/;
+function CodeText({ text }) {
+  const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+  return (
+    <div className="k-code-text">
+      {blocks.map((b, i) => {
+        const lines = b.split('\n');
+        if (!lines.every(l => l.trim().startsWith('|'))) return <p key={i}>{b}</p>;
+        const rows = lines.filter(l => !/^\|[\s|:-]+\|$/.test(l.trim()))
+          .map(l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()));
+        const [head, ...body] = rows;
+        const hasHead = head.some(Boolean);
+        return (
+          <div key={i} className="k-code-table" tabIndex={0} role="region" aria-label="Tableau">
+            <table>
+              {hasHead && <thead><tr>{head.map((c, j) => <th key={j}>{c}</th>)}</tr></thead>}
+              <tbody>{body.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j} className={NUMBER.test(c) ? 'num' : undefined}>{c}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AskCodes({ ask }) {
   const [q, setQ] = useState('');
   return (
@@ -55,7 +82,7 @@ export default function Codes({ codes, ask }) {
                     <>
                       {activeArticle.contexte && <p className="k-kicker">{activeArticle.contexte.split('|').map(s => s.trim()).filter(Boolean).join(' › ')}</p>}
                       <h3>{activeArticle.numero || activeArticle.label}</h3>
-                      <p className="k-code-text">{activeArticle.text}</p>
+                      <CodeText text={activeArticle.text} />
                       <div className="k-turn-actions">
                         {activeArticle.url && <a className="k-btn ghost" href={activeArticle.url} target="_blank" rel="noreferrer">Source au Journal officiel <ExternalLink size={12} /></a>}
                         <button className="k-btn ghost" onClick={() => ask(`Que prévoit ${activeArticle.numero || 'cet article'} du ${codeLabel(activeCode)} ?`, 'codes')}>Expliquer cet article <ArrowRight size={13} /></button>
