@@ -14,8 +14,9 @@ precacheAndRoute(self.__WB_MANIFEST)
 
 // Same policy as the previous generateSW config: read endpoints get a short
 // cached fallback for flaky connections, nothing is cached indefinitely.
+// Never /api/auth: sign-in redirects and account data must not be replayed from a cache
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api'),
+  ({ url }) => url.pathname.startsWith('/api') && !url.pathname.startsWith('/api/auth/'),
   new NetworkFirst({
     cacheName: 'api-cache',
     networkTimeoutSeconds: 8,

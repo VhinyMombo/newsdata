@@ -82,6 +82,25 @@ CREATE TABLE IF NOT EXISTS conversations (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_conversations_recent ON conversations(user_id, updated_at);
+CREATE TABLE IF NOT EXISTS identities (
+    provider   TEXT NOT NULL CHECK (provider IN ('google', 'facebook')),
+    subject    TEXT NOT NULL,
+    user_id    INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (provider, subject),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS oauth_states (
+    state_hash TEXT PRIMARY KEY,
+    provider   TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS login_codes (
+    code_hash  TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 """
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -105,8 +124,14 @@ def _conn():
         conn.close()
 
 
+# Accounts opened through Facebook with a phone number have no e-mail: they get
+# a unique address on a reserved domain (RFC 2606) that never receives mail
+NO_EMAIL_DOMAIN = "comptes.lekiosque.invalid"
+
+
 def _public_user(row: sqlite3.Row) -> dict:
-    return {"id": row["id"], "email": row["email"], "display_name": row["display_name"]}
+    email = "" if row["email"].endswith("@" + NO_EMAIL_DOMAIN) else row["email"]
+    return {"id": row["id"], "email": email, "display_name": row["display_name"]}
 
 
 def create_user(email: str, password: str, display_name: str) -> tuple[dict, str]:
@@ -374,3 +399,103 @@ def reset_password(token: str, new_password: str) -> tuple[dict, str]:
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (reset["user_id"],))
         row = conn.execute("SELECT * FROM users WHERE id = ?", (reset["user_id"],)).fetchone()
         return _public_user(row), _create_session(conn, row["id"])
+
+
+# ── Sign-in with Google or Facebook (see oauth.py) ──────────────────────────
+
+OAUTH_STATE_TTL_MINUTES = 10
+LOGIN_CODE_TTL_SECONDS = 120
+
+
+def create_oauth_state(provider: str) -> str:
+    """A single-use value sent to the provider and checked on the way back: a
+    callback this browser did not start is refused (CSRF)."""
+    state = secrets.token_urlsafe(32)
+    now = datetime.utcnow()
+    with _conn() as conn:
+        conn.execute("DELETE FROM oauth_states WHERE expires_at < ?", (now.isoformat(),))
+        conn.execute(
+            "INSERT INTO oauth_states (state_hash, provider, expires_at) VALUES (?, ?, ?)",
+            (_hash_token(state), provider, (now + timedelta(minutes=OAUTH_STATE_TTL_MINUTES)).isoformat()),
+        )
+    return state
+
+
+def consume_oauth_state(state: str, provider: str) -> bool:
+    with _conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM oauth_states WHERE state_hash = ? AND provider = ? AND expires_at > ?",
+            (_hash_token(state or ""), provider, datetime.utcnow().isoformat()),
+        )
+        return cur.rowcount == 1
+
+
+def login_with_identity(provider: str, ident: dict) -> int:
+    """The account for this Google or Facebook identity: the one already linked,
+    else an existing account with the same Google-verified address, else a new one."""
+    subject = ident["subject"]
+    email = (ident.get("email") or "").strip().lower() or None
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM identities WHERE provider = ? AND subject = ?", (provider, subject),
+        ).fetchone()
+        if row:
+            return row["user_id"]
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone() if email else None
+        if existing:
+            # Linking by address is safe only when the provider vouches for it
+            if not ident.get("email_verified"):
+                raise AuthError(
+                    "Un compte existe déjà avec l'adresse de ce compte Facebook. "
+                    "Connectez-vous avec votre e-mail et votre mot de passe."
+                )
+            user_id = existing["id"]
+        else:
+            address = email if email and _EMAIL_RE.match(email) else f"{provider}-{subject}@{NO_EMAIL_DOMAIN}"
+            name = (ident.get("name") or "").strip()[:80] or (email.split("@")[0] if email else "Lecteur")
+            # No password: a random one nobody knows. "Mot de passe oublié" sets a real one
+            unusable = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode()
+            user_id = conn.execute(
+                "INSERT INTO users (email, password_hash, display_name) VALUES (?, ?, ?)",
+                (address, unusable, name),
+            ).lastrowid
+        conn.execute(
+            "INSERT INTO identities (provider, subject, user_id) VALUES (?, ?, ?)", (provider, subject, user_id),
+        )
+        return user_id
+
+
+def create_login_code(user_id: int) -> str:
+    """A two-minute, single-use code the app trades for a session: the session
+    token itself never travels in an address."""
+    code = secrets.token_urlsafe(32)
+    now = datetime.utcnow()
+    with _conn() as conn:
+        conn.execute("DELETE FROM login_codes WHERE expires_at < ?", (now.isoformat(),))
+        conn.execute(
+            "INSERT INTO login_codes (code_hash, user_id, expires_at) VALUES (?, ?, ?)",
+            (_hash_token(code), user_id, (now + timedelta(seconds=LOGIN_CODE_TTL_SECONDS)).isoformat()),
+        )
+    return code
+
+
+def exchange_login_code(code: str) -> tuple[dict, str]:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM login_codes WHERE code_hash = ? AND expires_at > ?",
+            (_hash_token(code), datetime.utcnow().isoformat()),
+        ).fetchone()
+        if not row:
+            raise AuthError("La connexion a expiré. Recommencez.")
+        conn.execute("DELETE FROM login_codes WHERE code_hash = ?", (_hash_token(code),))
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        return _public_user(user), _create_session(conn, user["id"])
+
+
+def delete_user(user_id: int) -> None:
+    """Erase the account and everything attached to it, at the reader's request."""
+    with _conn() as conn:
+        for table in ("sessions", "follows", "push_subscriptions", "password_resets",
+                      "conversations", "identities", "login_codes"):
+            conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))

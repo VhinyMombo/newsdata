@@ -46,6 +46,19 @@ export default function App() {
     window.history.replaceState(null, '', '#/');
   }, [route, openReset]);
 
+  // Back from Google or Facebook: sign in with the one-time code, or say what went wrong
+  const { exchange, showAuthError } = session;
+  useEffect(() => {
+    if (route.view !== 'connexion') return;
+    const code = route.params.get('code');
+    const error = route.params.get('erreur');
+    window.history.replaceState(null, '', '#/');
+    if (code) exchange(code);
+    else if (error === 'compte') showAuthError(route.params.get('message') || 'Connexion impossible.');
+    else if (error === 'expire') showAuthError('La connexion a expiré. Recommencez.');
+    else if (error === 'fournisseur') showAuthError("Le service de connexion n'a pas répondu. Réessayez dans un instant.");
+  }, [route, exchange, showAuthError]);
+
   const view = ['une', 'assistant', 'editions', 'tendances', 'codes'].includes(route.view) ? route.view : 'une';
 
   return (
@@ -67,6 +80,8 @@ export default function App() {
           onProfileUpdated={session.setUser}
           onForgot={session.forgot}
           resetToken={session.resetToken}
+          providers={session.providers}
+          onDeleteAccount={session.deleteAccount}
         />
       )}
 

@@ -271,3 +271,14 @@
 .auth-step-title { font: 600 1.15rem/1.3 var(--sans); color: var(--text); margin-top: 4px; }
 .auth-step-text { font-size: 0.92rem; line-height: 1.5; color: var(--text-2); }
 .auth-step-text b { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+
+/* Continuer avec Google / Facebook: the providers' own marks on plain white buttons, as their guidelines ask */
+.auth-providers { display: grid; gap: 8px; }
+.auth-provider { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border: 1px solid var(--border-strong); border-radius: 10px; background: #fff; color: var(--text); font: 600 0.95rem/1 var(--sans); text-decoration: none; }
+.auth-provider:hover { background: var(--panel-alt); }
+.auth-provider:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.auth-or { display: flex; align-items: center; gap: 12px; font-size: 0.8rem; color: var(--text-3); }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.auth-fineprint a { color: inherit; text-decoration: underline; }
+.auth-delete { display: grid; justify-items: start; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.auth-delete-confirm { min-height: 40px; padding: 0 14px; border-radius: 8px; background: var(--clay, #A8431F); color: #fff; font: 600 0.88rem/1 var(--sans); }

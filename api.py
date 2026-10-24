@@ -16,6 +16,7 @@ import math
 import os
 import re
 import time
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -27,7 +28,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -38,6 +39,7 @@ from pydantic import BaseModel, Field
 import auth
 import llm
 import mailer
+import oauth
 
 load_dotenv()
 
@@ -632,6 +634,10 @@ class ResetPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class LoginCodeRequest(BaseModel):
+    code: str = Field(min_length=20, max_length=100)
+
+
 class UpdateProfileRequest(BaseModel):
     display_name: str | None = Field(default=None, max_length=80)
     current_password: str | None = Field(default=None, max_length=200)
@@ -756,6 +762,64 @@ def reset_password(request: Request, req: ResetPasswordRequest):
     return {"user": user, "token": token}
 
 
+# ── Sign-in with Google or Facebook ─────────────────────────────────────────
+# start → the provider's page → callback → back to the app with a one-time code
+# (#/connexion?code=…) that the app trades for a session at /auth/exchange.
+
+_PROVIDER = PathParam(pattern="^(google|facebook)$")
+
+
+def _oauth_redirect_uri(provider: str) -> str:
+    return f"{PUBLIC_URL}/api/auth/{provider}/callback"
+
+
+def _back_to_app(**params: str) -> RedirectResponse:
+    return RedirectResponse(f"{PUBLIC_URL}/#/connexion?{urllib.parse.urlencode(params)}", status_code=303)
+
+
+@app.get("/auth/providers")
+def auth_providers():
+    return {"providers": oauth.configured()}
+
+
+@app.get("/auth/{provider}/start")
+@limiter.limit("20/minute")
+def oauth_start(request: Request, provider: str = _PROVIDER):
+    if provider not in oauth.configured():
+        raise HTTPException(status_code=404, detail="Connexion indisponible.")
+    state = auth.create_oauth_state(provider)
+    return RedirectResponse(oauth.authorize_url(provider, _oauth_redirect_uri(provider), state), status_code=303)
+
+
+@app.get("/auth/{provider}/callback")
+@limiter.limit("20/minute")
+def oauth_callback(request: Request, provider: str = _PROVIDER, code: str = "", state: str = "", error: str = ""):
+    if error:
+        # The reader closed the provider's page or refused: no message needed
+        return _back_to_app(erreur="annule")
+    if provider not in oauth.configured() or not code or not auth.consume_oauth_state(state, provider):
+        return _back_to_app(erreur="expire")
+    try:
+        ident = oauth.identity(provider, code, _oauth_redirect_uri(provider))
+        user_id = auth.login_with_identity(provider, ident)
+    except auth.AuthError as e:
+        return _back_to_app(erreur="compte", message=str(e))
+    except oauth.OAuthError:
+        logger.exception("%s sign-in failed", provider)
+        return _back_to_app(erreur="fournisseur")
+    return _back_to_app(code=auth.create_login_code(user_id))
+
+
+@app.post("/auth/exchange")
+@limiter.limit("20/minute")
+def exchange_login_code(request: Request, req: LoginCodeRequest):
+    try:
+        user, token = auth.exchange_login_code(req.code)
+    except auth.AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    return {"user": user, "token": token}
+
+
 @app.post("/auth/logout")
 def logout(token: str | None = Depends(_bearer_token)):
     if token:
@@ -766,6 +830,12 @@ def logout(token: str | None = Depends(_bearer_token)):
 @app.get("/auth/me")
 def me(user: dict = Depends(require_user)):
     return user
+
+
+@app.delete("/auth/me")
+def delete_me(user: dict = Depends(require_user)):
+    auth.delete_user(user["id"])
+    return {"status": "ok"}
 
 
 @app.patch("/auth/me")
