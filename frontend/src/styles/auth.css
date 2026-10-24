@@ -282,3 +282,5 @@
 .auth-fineprint a { color: inherit; text-decoration: underline; }
 .auth-delete { display: grid; justify-items: start; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 .auth-delete-confirm { min-height: 40px; padding: 0 14px; border-radius: 8px; background: var(--clay, #A8431F); color: #fff; font: 600 0.88rem/1 var(--sans); }
+/* After "Supprimer mon compte": a clear confirmation, not a silent sign-out */
+.auth-deleted-mark { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--pop-soft, #EBDDDF); color: var(--pop, var(--accent)); }

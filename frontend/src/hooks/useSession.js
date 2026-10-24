@@ -8,7 +8,7 @@ const TOKEN_KEY = 'lekiosque_auth_token';
 export function useSession() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
-  const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register' | 'forgot' | 'reset' | 'profile'
+  const [authModal, setAuthModal] = useState(null); // null | 'login' | 'register' | 'forgot' | 'reset' | 'profile' | 'deleted'
   // From the e-mailed link (#/reinitialiser?token=…), kept here once the address bar is cleaned
   const [resetToken, setResetToken] = useState(null);
   const [authBusy, setAuthBusy] = useState(false);
@@ -155,7 +155,8 @@ export function useSession() {
     localStorage.removeItem(TOKEN_KEY);
     setAuthToken(null);
     setUser(null);
-    setAuthModal(null);
+    // Say plainly that it is done, rather than looking like a mere sign-out
+    setAuthModal('deleted');
   }, [authToken]);
 
   const openAuth = useCallback((mode) => { setAuthError(''); setAuthModal(mode); }, []);

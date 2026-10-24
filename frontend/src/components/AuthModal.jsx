@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import '../styles/auth.css';
 import {
-  Bell, History, Star, X,
+  Bell, Check, History, Star, X,
 } from 'lucide-react';
 import { API_URL } from '../utils/api';
 import { PLATFORM, isStandalone } from '../hooks/useInstall';
@@ -191,7 +191,19 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
       <div className={`auth-modal ${mode !== 'profile' ? 'auth-modal-entry' : ''}`} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="auth-modal-close" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
 
-        {mode !== 'profile' ? (
+        {mode === 'deleted' ? (
+          <div className="auth-form auth-deleted" role="status">
+            <header className="auth-brand">
+              <span className="auth-deleted-mark" aria-hidden="true"><Check size={28} /></span>
+              <span className="auth-brand-name">Compte supprimé</span>
+              <span className="auth-brand-rule" aria-hidden="true" />
+            </header>
+            <p className="auth-step-text">Votre demande a bien été prise en compte. Votre compte, vos sujets suivis, vos conversations et vos notifications ont été effacés de nos serveurs.</p>
+            <p className="auth-step-text">Les copies de sauvegarde qui les contiennent encore sont effacées d'elles-mêmes dans les 60 jours.</p>
+            <p className="auth-step-text">Vous pouvez continuer à lire Le Kiosque et à poser des questions sans compte.</p>
+            <button type="button" className="auth-submit" onClick={onClose}>Continuer la lecture</button>
+          </div>
+        ) : mode !== 'profile' ? (
           <form
             className="auth-form"
             onSubmit={async (e) => {
