@@ -168,6 +168,7 @@ CODE_LABELS = {
     "codes_nationalites":   "Code de la nationalité",
     "code_travail":         "Code du travail",
     "loi_de_finances_2026": "Loi de Finances 2026",
+    "projet_loi_de_finances_2027": "Projet de loi de finances 2027 (non adopté)",
 }
 
 # Browse index for the Codes de loi side panel: entries grouped by code,
