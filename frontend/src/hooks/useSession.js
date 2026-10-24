@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '../utils/track';
 import { API_URL, authHeaders } from '../utils/api';
 
@@ -97,6 +97,40 @@ export function useSession() {
     }
   }, []);
 
+  // Installed on a phone, Google or Facebook opens in a browser sheet over the app and
+  // would come back signed in there, not here. The app keeps a secret, sends it along,
+  // and asks the server every two seconds until the sheet has finished.
+  const waitRef = useRef(null);
+  const signInFromApp = useCallback((provider) => {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const secret = btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, c => ({ '+': '-', '/': '_', '=': '' }[c]));
+    window.open(`${API_URL}/auth/${provider}/start?app=${secret}`, '_blank');
+    clearInterval(waitRef.current);
+    setAuthError('');
+    setAuthBusy(true);
+    const until = Date.now() + 10 * 60 * 1000;
+    waitRef.current = setInterval(async () => {
+      if (Date.now() > until) { clearInterval(waitRef.current); setAuthBusy(false); return; }
+      try {
+        const res = await fetch(`${API_URL}/auth/app-wait?app=${secret}`);
+        const body = await res.json();
+        if (body.status === 'pending') return;
+        clearInterval(waitRef.current);
+        setAuthBusy(false);
+        if (body.status === 'ok') {
+          localStorage.setItem(TOKEN_KEY, body.token);
+          setAuthToken(body.token);
+          setUser(body.user);
+          setAuthModal(null);
+        } else if (body.status === 'error') {
+          setAuthError(body.message);
+          setAuthModal('login');
+        }
+      } catch { /* offline for a moment: try again on the next tick */ }
+    }, 2000);
+  }, []);
+  useEffect(() => () => clearInterval(waitRef.current), []);
+
   const showAuthError = useCallback((message) => { setAuthError(message); setAuthModal('login'); }, []);
 
   const openReset = useCallback((token) => { setResetToken(token); setAuthError(''); setAuthModal('reset'); }, []);
@@ -121,5 +155,5 @@ export function useSession() {
 
   const openAuth = useCallback((mode) => { setAuthError(''); setAuthModal(mode); }, []);
 
-  return { authToken, user, setUser, authModal, setAuthModal, openAuth, authBusy, authError, submit, logout, forgot, resetToken, openReset, providers, exchange, showAuthError, deleteAccount };
+  return { authToken, user, setUser, authModal, setAuthModal, openAuth, authBusy, authError, submit, logout, forgot, resetToken, openReset, providers, exchange, showAuthError, deleteAccount, signInFromApp };
 }

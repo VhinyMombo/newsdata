@@ -25,10 +25,10 @@ from zoneinfo import ZoneInfo
 import chromadb
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -782,32 +782,63 @@ def auth_providers():
     return {"providers": oauth.configured()}
 
 
+def _sheet_page(title: str, text: str) -> HTMLResponse:
+    """Shown in the browser sheet the installed app opened: the app, underneath,
+    has already picked up the result; the reader only has to close the sheet."""
+    return HTMLResponse(f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} · Le Kiosque</title></head>
+<body style="margin:0;font:17px/1.55 Georgia,serif;color:#0F2A3A;background:#fff">
+<main style="max-width:420px;margin:0 auto;padding:56px 24px;text-align:center">
+<img src="/icons/icon-192.png" width="64" height="64" alt="" style="border-radius:14px">
+<h1 style="font-weight:400;font-size:1.6rem;margin:20px 0 10px">{title}</h1>
+<p style="color:#34495A">{text}</p>
+<p style="margin-top:28px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche pour revenir au Kiosque.</p>
+</main></body></html>""")
+
+
 @app.get("/auth/{provider}/start")
 @limiter.limit("20/minute")
-def oauth_start(request: Request, provider: str = _PROVIDER):
+def oauth_start(request: Request, provider: str = _PROVIDER, app_wait: str = Query(default="", alias="app", max_length=100)):
     if provider not in oauth.configured():
         raise HTTPException(status_code=404, detail="Connexion indisponible.")
-    state = auth.create_oauth_state(provider)
+    state = auth.create_oauth_state(provider, app_wait if len(app_wait) >= 20 else None)
     return RedirectResponse(oauth.authorize_url(provider, _oauth_redirect_uri(provider), state), status_code=303)
 
 
 @app.get("/auth/{provider}/callback")
 @limiter.limit("20/minute")
 def oauth_callback(request: Request, provider: str = _PROVIDER, code: str = "", state: str = "", error: str = ""):
-    if error:
-        # The reader closed the provider's page or refused: no message needed
-        return _back_to_app(erreur="annule")
-    if provider not in oauth.configured() or not code or not auth.consume_oauth_state(state, provider):
+    valid, app_hash = auth.consume_oauth_state(state, provider) if provider in oauth.configured() else (False, None)
+    if not valid:
         return _back_to_app(erreur="expire")
+
+    def fail(kind: str, message: str):
+        if app_hash:
+            auth.finish_app_login(app_hash, error=message)
+            return _sheet_page("Connexion impossible", message)
+        return _back_to_app(erreur=kind, message=message)
+
+    if error or not code:
+        # The reader closed the provider's page or refused
+        return fail("annule", "La connexion a été annulée.")
     try:
         ident = oauth.identity(provider, code, _oauth_redirect_uri(provider))
         user_id = auth.login_with_identity(provider, ident)
     except auth.AuthError as e:
-        return _back_to_app(erreur="compte", message=str(e))
+        return fail("compte", str(e))
     except oauth.OAuthError:
         logger.exception("%s sign-in failed", provider)
-        return _back_to_app(erreur="fournisseur")
+        return fail("fournisseur", "Le service de connexion n'a pas répondu. Réessayez dans un instant.")
+    if app_hash:
+        auth.finish_app_login(app_hash, user_id=user_id)
+        return _sheet_page("Vous êtes connecté", "Le Kiosque vous a reconnu.")
     return _back_to_app(code=auth.create_login_code(user_id))
+
+
+@app.get("/auth/app-wait")
+@limiter.limit("60/minute")
+def oauth_app_wait(request: Request, app_wait: str = Query(alias="app", min_length=20, max_length=100)):
+    return auth.app_login_result(app_wait)
 
 
 @app.post("/auth/exchange")

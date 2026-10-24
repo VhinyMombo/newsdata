@@ -82,6 +82,7 @@ export default function App() {
           resetToken={session.resetToken}
           providers={session.providers}
           onDeleteAccount={session.deleteAccount}
+          onProviderInApp={session.signInFromApp}
         />
       )}
 

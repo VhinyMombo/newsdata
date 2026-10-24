@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS oauth_states (
     provider   TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
+-- Installed app on a phone: Google or Facebook opens in a browser sheet over the
+-- app, so the app waits for the result under a secret only it holds
+CREATE TABLE IF NOT EXISTS app_logins (
+    app_hash   TEXT PRIMARY KEY,
+    user_id    INTEGER,
+    error      TEXT,
+    expires_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS login_codes (
     code_hash  TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL,
@@ -407,27 +415,71 @@ OAUTH_STATE_TTL_MINUTES = 10
 LOGIN_CODE_TTL_SECONDS = 120
 
 
-def create_oauth_state(provider: str) -> str:
+def _migrate_oauth_states(conn: sqlite3.Connection) -> None:
+    if "app_hash" not in {r["name"] for r in conn.execute("PRAGMA table_info(oauth_states)")}:
+        conn.execute("ALTER TABLE oauth_states ADD COLUMN app_hash TEXT")
+
+
+def create_oauth_state(provider: str, app_secret: str | None = None) -> str:
     """A single-use value sent to the provider and checked on the way back: a
-    callback this browser did not start is refused (CSRF)."""
+    callback this browser did not start is refused (CSRF). With app_secret, the
+    installed app that holds it will collect the result (see app_login_result)."""
     state = secrets.token_urlsafe(32)
     now = datetime.utcnow()
+    expires = (now + timedelta(minutes=OAUTH_STATE_TTL_MINUTES)).isoformat()
     with _conn() as conn:
+        _migrate_oauth_states(conn)
         conn.execute("DELETE FROM oauth_states WHERE expires_at < ?", (now.isoformat(),))
+        conn.execute("DELETE FROM app_logins WHERE expires_at < ?", (now.isoformat(),))
+        app_hash = _hash_token(app_secret) if app_secret else None
         conn.execute(
-            "INSERT INTO oauth_states (state_hash, provider, expires_at) VALUES (?, ?, ?)",
-            (_hash_token(state), provider, (now + timedelta(minutes=OAUTH_STATE_TTL_MINUTES)).isoformat()),
+            "INSERT INTO oauth_states (state_hash, provider, expires_at, app_hash) VALUES (?, ?, ?, ?)",
+            (_hash_token(state), provider, expires, app_hash),
         )
+        if app_hash:
+            conn.execute(
+                "INSERT OR REPLACE INTO app_logins (app_hash, user_id, error, expires_at) VALUES (?, NULL, NULL, ?)",
+                (app_hash, expires),
+            )
     return state
 
 
-def consume_oauth_state(state: str, provider: str) -> bool:
+def consume_oauth_state(state: str, provider: str) -> tuple[bool, str | None]:
+    """(valid, app_hash): app_hash is set when an installed app waits for this sign-in."""
     with _conn() as conn:
-        cur = conn.execute(
-            "DELETE FROM oauth_states WHERE state_hash = ? AND provider = ? AND expires_at > ?",
+        _migrate_oauth_states(conn)
+        row = conn.execute(
+            "SELECT app_hash FROM oauth_states WHERE state_hash = ? AND provider = ? AND expires_at > ?",
             (_hash_token(state or ""), provider, datetime.utcnow().isoformat()),
-        )
-        return cur.rowcount == 1
+        ).fetchone()
+        if not row:
+            return False, None
+        conn.execute("DELETE FROM oauth_states WHERE state_hash = ?", (_hash_token(state),))
+        return True, row["app_hash"]
+
+
+def finish_app_login(app_hash: str, user_id: int | None = None, error: str | None = None) -> None:
+    with _conn() as conn:
+        conn.execute("UPDATE app_logins SET user_id = ?, error = ? WHERE app_hash = ?", (user_id, error, app_hash))
+
+
+def app_login_result(app_secret: str) -> dict:
+    """What the waiting app sees: pending, then a session once (single use), or the error."""
+    app_hash = _hash_token(app_secret)
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM app_logins WHERE app_hash = ? AND expires_at > ?", (app_hash, datetime.utcnow().isoformat()),
+        ).fetchone()
+        if not row:
+            return {"status": "expired"}
+        if row["error"]:
+            conn.execute("DELETE FROM app_logins WHERE app_hash = ?", (app_hash,))
+            return {"status": "error", "message": row["error"]}
+        if row["user_id"] is None:
+            return {"status": "pending"}
+        conn.execute("DELETE FROM app_logins WHERE app_hash = ?", (app_hash,))
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        return {"status": "ok", "user": _public_user(user), "token": _create_session(conn, user["id"])}
 
 
 def login_with_identity(provider: str, ident: dict) -> int:

@@ -4,7 +4,7 @@ import {
   Bell, History, Star, X,
 } from 'lucide-react';
 import { API_URL } from '../utils/api';
-import { PLATFORM } from '../hooks/useInstall';
+import { PLATFORM, isStandalone } from '../hooks/useInstall';
 
 // Google refuses to sign in inside the browsers built into WhatsApp, Facebook or
 // Instagram ("disallowed_useragent"): offer it only where it works
@@ -30,19 +30,22 @@ function FacebookMark() {
 }
 
 /** "Continuer avec Google / Facebook": the browser goes to the provider's page and comes back signed in. */
-function ProviderButtons({ providers }) {
+function ProviderButtons({ providers, onInApp, busy }) {
   const shown = providers.filter(p => !(p === 'google' && IN_APP));
   if (!shown.length) return null;
+  // From the home-screen app: open the provider in a sheet and wait (see useSession)
+  const click = (provider) => (e) => { if (isStandalone()) { e.preventDefault(); onInApp(provider); } };
   return (
     <>
       <div className="auth-providers">
         {shown.includes('google') && (
-          <a className="auth-provider" href={`${API_URL}/auth/google/start`}><GoogleMark />Continuer avec Google</a>
+          <a className="auth-provider" href={`${API_URL}/auth/google/start`} onClick={click('google')}><GoogleMark />Continuer avec Google</a>
         )}
         {shown.includes('facebook') && (
-          <a className="auth-provider" href={`${API_URL}/auth/facebook/start`}><FacebookMark />Continuer avec Facebook</a>
+          <a className="auth-provider" href={`${API_URL}/auth/facebook/start`} onClick={click('facebook')}><FacebookMark />Continuer avec Facebook</a>
         )}
       </div>
+      {busy && isStandalone() && <p className="auth-step-text">Connectez-vous dans la fenêtre qui s'est ouverte, puis fermez-la : Le Kiosque vous attend ici.</p>}
       <p className="auth-or"><span>ou avec votre e-mail</span></p>
     </>
   );
@@ -60,7 +63,7 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
-export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount }) {
+export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount, onProviderInApp }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -240,7 +243,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                 <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
                 <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
               </ul>
-              <ProviderButtons providers={providers} />
+              <ProviderButtons providers={providers} onInApp={onProviderInApp} busy={busy} />
               {mode === 'register' && (
                 <input
                   className="auth-input" placeholder="Nom affiché" value={displayName}
