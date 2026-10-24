@@ -16,6 +16,7 @@ import math
 import os
 import re
 import time
+import unicodedata
 import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
@@ -72,6 +73,9 @@ NONTEMPORAL_REC_WEIGHT      = float(os.getenv("NONTEMPORAL_REC_WEIGHT",      "0.
 NONTEMPORAL_HALF_LIFE_DAYS  = float(os.getenv("NONTEMPORAL_HALF_LIFE_DAYS",  "45"))
 # Max characters of each article passed to the LLM for answer generation
 ANSWER_EXCERPT_CHARS = int(os.getenv("ANSWER_EXCERPT_CHARS", "4000"))
+# Same for law articles, whose finance-law tables run far longer than a press
+# article; past this, the lines that match the question are kept (see _law_excerpt)
+CODES_EXCERPT_CHARS = int(os.getenv("CODES_EXCERPT_CHARS", "8000"))
 # Ollama context window for the chat model (must fit system + 5 articles + question)
 CHAT_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "16384"))
 # Web push (see push_notify.py) — keys generated once via py-vapid, stored in .env
@@ -392,11 +396,78 @@ Rédaction :
 """
 
 
+_EXCERPT_STOPWORDS = {
+    "dans", "pour", "avec", "elle", "elles", "sont", "quel", "quelle", "quels", "quelles",
+    "comment", "combien", "est-ce", "cette", "entre", "leur", "leurs", "plus", "moins",
+    "loi", "lois", "finances", "article", "articles", "projet", "2026", "2027",
+}
+
+
+def _fold(s: str) -> str:
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+
+
+def _law_excerpt(text: str, question: str, limit: int) -> str:
+    """The article as the model should read it. A long one (a finance law's
+    staff or mission tables) is cut down to its opening, then the lines that
+    share a word with the question, each with the title and header row of its
+    table, in the article's order; "[…]" marks what was left out. A plain cut
+    would drop the row asked about whenever it sits past the limit."""
+    if len(text) <= limit:
+        return text
+    stems = {_fold(w)[:6] for w in re.findall(r"[\w-]{4,}", question) if _fold(w) not in _EXCERPT_STOPWORDS}
+    lines = text.split("\n")
+    folded = [_fold(l) for l in lines]
+    keep: set[int] = set()
+    size = 0
+    for i, line in enumerate(lines):  # the opening, which says what the article is about
+        if size + len(line) > limit // 4:
+            break
+        keep.add(i)
+        size += len(line) + 1
+
+    def table_head(i: int) -> list[int]:
+        """Header row and title of the Markdown table that line i belongs to."""
+        if not lines[i].startswith("|"):
+            return []
+        j = i
+        while j > 0 and lines[j - 1].startswith("|"):
+            j -= 1
+        head = [j, j + 1]  # header row and its | --- | separator
+        k = j - 1
+        while k >= 0 and not lines[k].strip():
+            k -= 1
+        return head + ([k] if k >= 0 else [])
+
+    scored = sorted(
+        ((sum(s in f for s in stems), i) for i, f in enumerate(folded)),
+        key=lambda t: (-t[0], t[1]),
+    )
+    for score, i in scored:
+        if score == 0:
+            break
+        new = [n for n in [i, *table_head(i)] if n not in keep]
+        cost = sum(len(lines[n]) + 1 for n in new)
+        if size + cost > limit:
+            continue
+        keep.update(new)
+        size += cost
+    out, last = [], -1
+    for i in sorted(keep):
+        if i > last + 1:
+            out.append("[…]")
+        out.append(lines[i])
+        last = i
+    if last < len(lines) - 1:
+        out.append("[…]")
+    return "\n".join(out)
+
+
 def build_codes_prompt(question: str, extracts: list["ContextArticle"]) -> str:
     """User-turn prompt for the legal corpus: extracts + question."""
     blocks = []
     for ext in extracts:
-        blocks.append(f"[{ext.title}]\n{ext.full_text[:ANSWER_EXCERPT_CHARS]}")
+        blocks.append(f"[{ext.title}]\n{_law_excerpt(ext.full_text, question, CODES_EXCERPT_CHARS)}")
     context = "\n\n---------------------\n\n".join(blocks)
 
     return (
