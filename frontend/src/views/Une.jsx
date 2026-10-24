@@ -230,6 +230,8 @@ export default function Une({ ask, session, corpus, health, reports }) {
           </div>
         </section>
       )}
+      {/* Google shows the app's name on its sign-in page only when the home page links the privacy policy */}
+      <p className="k-wrap k-legal"><a href="/confidentialite.html">Confidentialité</a></p>
     </>
   );
 }

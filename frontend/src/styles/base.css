@@ -565,3 +565,7 @@ body:has(.k-install) { padding-bottom: 0; background: var(--hero, var(--bg-alt))
 .k-saved-hint { margin-top: 32px; display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border-radius: 10px; background: var(--bg-alt); font-size: 0.9rem; line-height: 1.5; color: var(--ink-soft); }
 .k-saved-hint svg { flex: none; margin-top: 3px; color: var(--muted); }
 .k-saved-hint .k-textlink { display: inline; font-size: inherit; }
+
+/* One quiet line under the home page: the privacy policy, which Google's brand check looks for */
+.k-legal { padding-top: 28px; padding-bottom: 32px; text-align: center; font-size: 0.82rem; }
+.k-legal a { color: var(--muted); }
