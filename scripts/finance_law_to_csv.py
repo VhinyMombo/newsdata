@@ -38,7 +38,8 @@ LAW_ARTICLE = re.compile(r"^Article\s+(\d+)\s*(er|ère)?\s*:\s*(.*)$", re.S)
 CODE_ARTICLE = re.compile(r"^«\s*Article\s+(.+?)\s*:\s*(.*)$", re.S)
 LAW_LEVELS = [
     ("partie", re.compile(r"^(PREMIERE|PREMIÈRE|SECONDE|DEUXIEME|DEUXIÈME|TROISIEME|TROISIÈME)\s+PARTIE\b")),
-    ("titre", re.compile(r"^TITRE\s+[IVXL0-9]+\b")),
+    # The law numbers its titres in Roman numerals; "TITRE 4" belongs to an amended code
+    ("titre", re.compile(r"^TITRE\s+[IVXL]+\b")),
     ("chapitre", re.compile(r"^CHAPITRE\s+\w+")),
     ("section", re.compile(r"^[A-H]\s*[-–]\s+\S")),
 ]
@@ -119,9 +120,21 @@ def page_blocks(page) -> list[tuple[str, str]]:
         return not any(b[0] <= x <= b[2] and b[1] <= y <= b[3] for b in boxes)
 
     lines = page.filter(outside).extract_text_lines(keep_blank_chars=False)
-    items = [(t.bbox[1], "table", table_markdown(t.extract())) for t in tables]
-    # Page number alone at the foot of the page
-    lines = [l for l in lines if not (re.fullmatch(r"\d{1,3}", l["text"].strip()) and l["top"] > page.height * 0.85)]
+    items = []
+    for t in tables:
+        rows = [[clean(c or "") for c in r] for r in t.extract()]
+        cells = [c for r in rows for c in r if c]
+        # A framed heading or note (one column) is text, not a table
+        if all(sum(bool(c) for c in r) <= 1 for r in rows):
+            items.extend((t.bbox[1] + k * 0.01, "p", c) for k, c in enumerate(cells))
+        else:
+            items.append((t.bbox[1], "table", table_markdown(t.extract())))
+    # Page number alone at the foot of the page, and the Journal officiel's running
+    # header ("2  JOURNAL OFFICIEL DE LA REPUBLIQUE GABONAISE  30 DECEMBRE 2025 - N°96")
+    lines = [l for l in lines if not (
+        (re.fullmatch(r"\d{1,3}", l["text"].strip()) and (l["top"] > page.height * 0.85 or l["top"] < page.height * 0.08))
+        or (l["top"] < page.height * 0.1 and re.search(r"JOURNAL OFFICIEL DE LA R[EÉ]PUBLIQUE|\d{4}\s*-\s*N°\s*\d+", l["text"]))
+    )]
     gaps = sorted(b["top"] - a["top"] for a, b in zip(lines, lines[1:]) if b["top"] > a["top"])
     step = gaps[len(gaps) // 2] if gaps else 14
     para: list[str] = []
