@@ -1099,6 +1099,41 @@ def _code_title(meta: dict) -> str:
     return f"{label} · {numero}" if numero else label
 
 
+# Which text a question names, by the words readers use for it
+_CODE_HINTS = [
+    (re.compile(r"finances?\W+(?:\w+\W+){0,3}2027|PLF\W*2027|2027\W+(?:\w+\W+){0,3}finances", re.I), "projet_loi_de_finances_2027"),
+    (re.compile(r"finances?\W+(?:\w+\W+){0,3}2026|LFI?\W*2026|2026\W+(?:\w+\W+){0,3}finances", re.I), "loi_de_finances_2026"),
+    (re.compile(r"code\s+p[ée]nal", re.I), "codes_penal"),
+    (re.compile(r"code\s+minier", re.I), "codes_minier"),
+    (re.compile(r"code\s+de\s+l.enfant", re.I), "codes_enfants"),
+    (re.compile(r"hydrocarbures", re.I), "codes_hydrocarbures"),
+    (re.compile(r"nationalit[ée]", re.I), "codes_nationalites"),
+]
+_ARTICLE_NAMED = re.compile(r"\bart(?:icle|\.)\s*(\d+)\s*(er|bis|ter|quater|quinquies)?\b", re.I)
+
+
+def _named_code_articles(question: str) -> list[str]:
+    """Ids of the articles a question names ("l'article 105 du projet de loi de
+    finances 2027"), when it also names the text. The law's own article comes
+    first; in a finance law, a quoted article of the tax code ("article 250 du
+    CGI") is matched when the question says CGI or impôts."""
+    codes = [code for rx, code in _CODE_HINTS if rx.search(question) and code in _CODES_INDEX]
+    nums = _ARTICLE_NAMED.findall(question)
+    if not codes or not nums:
+        return []
+    wants_cgi = bool(re.search(r"\bCGI\b|code\s+g[ée]n[ée]ral\s+des\s+imp[ôo]ts", question, re.I))
+    ids: list[str] = []
+    for code in codes[:1]:
+        for num, suffix in nums:
+            head = f"article {num}{(' ' + suffix.lower()) if suffix and suffix.lower() != 'er' else ''}"
+            for e in _CODES_INDEX[code]:
+                numero = (e.get("numero") or "").lower()
+                is_cgi = "(" in numero
+                if (numero == head or numero.startswith(head + " ")) and is_cgi == wants_cgi:
+                    ids.append(e["id"])
+    return ids[:3]
+
+
 def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchResponse":
     if _codes_collection is None:
         raise HTTPException(
@@ -1119,10 +1154,25 @@ def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchR
         )
 
     results: list[ArticleResult] = []
+    # "Que prévoit l'article 105 du projet de loi de finances 2027 ?": the article
+    # named leads, whatever the embedding finds closest
+    named = _named_code_articles(question)
+    if named:
+        got = _codes_collection.get(ids=named, include=["documents", "metadatas"])
+        by_id = dict(zip(got["ids"], zip(got["metadatas"], got["documents"])))
+        for id_ in named:
+            if id_ in by_id:
+                meta, doc = by_id[id_]
+                results.append(ArticleResult(
+                    title=_code_title(meta), date="", source="Journal Officiel",
+                    category=CODE_LABELS.get(meta.get("code", ""), meta.get("code", "")),
+                    url=meta.get("source_url", ""), snippet=doc[:400] + "..." if len(doc) > 400 else doc,
+                    distance=0.0, id=id_,
+                ))
     for id_, meta, dist, doc in zip(
         raw["ids"][0], raw["metadatas"][0], raw["distances"][0], raw["documents"][0]
     ):
-        if dist >= CODES_RELEVANCE_THRESHOLD:
+        if dist >= CODES_RELEVANCE_THRESHOLD or id_ in named:
             continue
         results.append(ArticleResult(
             title    = _code_title(meta),

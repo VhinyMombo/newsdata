@@ -85,7 +85,7 @@ export default function Codes({ codes, ask }) {
                       <CodeText text={activeArticle.text} />
                       <div className="k-turn-actions">
                         {activeArticle.url && <a className="k-btn ghost" href={activeArticle.url} target="_blank" rel="noreferrer">Source au Journal officiel <ExternalLink size={12} /></a>}
-                        <button className="k-btn ghost" onClick={() => ask(`Que prévoit ${activeArticle.numero || 'cet article'} du ${codeLabel(activeCode)} ?`, 'codes')}>Expliquer cet article <ArrowRight size={13} /></button>
+                        <button className="k-btn ghost" onClick={() => ask(`Que prévoit ${activeArticle.numero ? activeArticle.numero.replace(/^Article/, "l'article") : 'cet article'} du ${codeLabel(activeCode).replace(/^./, c => c.toLowerCase())} ?`, 'codes')}>Expliquer cet article <ArrowRight size={13} /></button>
                       </div>
                     </>
                   )}
