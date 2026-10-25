@@ -5,6 +5,7 @@ import { acquire, isBusy, release } from '../utils/lock';
 
 const CHAT_STORAGE_KEY = 'lekiosque_chat';
 const THREAD_STORAGE_KEY = 'lekiosque_thread';
+const CORPUS_STORAGE_KEY = 'lekiosque_corpus';
 // Past turns sent to the LLM for follow-up understanding
 const HISTORY_TURNS = 3;
 const HISTORY_ANSWER_CHARS = 1200;
@@ -17,7 +18,10 @@ const savedTurns = (history) => history
   .map(t => ({ question: t.question, answer: t.answer, sources: (t.sources || []).slice(0, 10).map(slimSource) }));
 
 export function useChat({ setApiStatus, authToken }) {
-  const [corpus, setCorpus] = useState('presse'); // 'presse' | 'codes'
+  // Kept with the conversation, so a relaunched app goes on in the same corpus
+  const [corpus, setCorpus] = useState(() => {
+    try { return localStorage.getItem(CORPUS_STORAGE_KEY) === 'codes' ? 'codes' : 'presse'; } catch { return 'presse'; }
+  }); // 'presse' | 'codes'
   const [searching, setSearching] = useState(false);
   const [chatHistory, setChatHistory] = useState(() => {
     try {
@@ -46,6 +50,10 @@ export function useChat({ setApiStatus, authToken }) {
   useEffect(() => {
     try { localStorage.setItem(THREAD_STORAGE_KEY, threadId); } catch { /* storage unavailable */ }
   }, [threadId]);
+
+  useEffect(() => {
+    try { localStorage.setItem(CORPUS_STORAGE_KEY, corpus); } catch { /* storage unavailable */ }
+  }, [corpus]);
 
   // Signed in: once an answer is complete, the conversation is saved to the account
   useEffect(() => {

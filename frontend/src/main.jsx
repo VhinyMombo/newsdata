@@ -5,6 +5,7 @@ import './styles/accent.css'
 import App from './App.jsx'
 import Installer from './views/Installer.jsx'
 import { registerSW } from 'virtual:pwa-register'
+import { resume } from './utils/resume'
 
 // Installed on a phone, the app can stay open in the background for days without
 // a full reload, so a new deploy never reached it: look for a new version each time
@@ -22,6 +23,7 @@ registerSW({
 // The shared install link gets its own light page: the app would first pull the 20 MB
 // corpus export, a heavy start on a phone's data plan for someone who has not chosen yet
 const installer = window.location.pathname.replace(/\/+$/, '') === '/installer'
+const restoreScroll = installer ? () => {} : resume()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -30,4 +32,7 @@ createRoot(document.getElementById('root')).render(
 )
 
 // Lift the installed app's splash (index.html) once the first frame is painted
-requestAnimationFrame(() => window.__kiosqueReady?.())
+requestAnimationFrame(() => {
+  window.__kiosqueReady?.()
+  restoreScroll()
+})

@@ -71,6 +71,11 @@
         if (!standalone) { el.remove(); window.__kiosqueReady = function () {}; return; }
         var start = Date.now();
         var hold = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 300 : 1350;
+        // Back from an article (iOS relaunches the app, see utils/resume.js): no long logo again
+        try {
+          var point = JSON.parse(localStorage.getItem('lekiosque_resume') || 'null');
+          if (point && Date.now() - point.at < 30 * 60 * 1000) hold = 300;
+        } catch (e) { /* storage unavailable */ }
         window.__kiosqueReady = function () {
           setTimeout(function () {
             el.classList.add('out');
