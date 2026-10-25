@@ -19,7 +19,6 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
-from collections import Counter
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -200,16 +199,6 @@ if _codes_collection is not None:
         }
     except Exception as e:
         logger.warning(f"Codes browse index build failed: {e}")
-
-# The rows of the finance laws' tables, for search by keyword. An article is
-# embedded whole, and the embedding model reads only its opening: the row
-# "Soutien à la farine … -100 %" deep in the 15,000-character article 56 of the
-# 2026 law is never what the question's vector lands on. Each row keeps the
-# words of its table's header row; a row cut to zero also reads as "supprimé".
-# Built on first use (about 4,000 short rows), see _table_rows.
-_CUT_TO_ZERO = re.compile(r"\|\s*-100\s?%\s*\|")
-_TABLE_ROWS: list[tuple[str, set[str]]] | None = None
-_ROW_DF: Counter = Counter()
 
 
 # ── RAG helpers ───────────────────────────────────────────────────────────────
@@ -430,10 +419,9 @@ def _law_excerpt(text: str, question: str, limit: int) -> str:
     would drop the row asked about whenever it sits past the limit."""
     if len(text) <= limit:
         return text
-    stems = _stems(question)
+    stems = {_fold(w)[:6] for w in re.findall(r"[\w-]{4,}", question) if _fold(w) not in _EXCERPT_STOPWORDS}
     lines = text.split("\n")
-    # a row cut to zero answers a question about what was removed
-    folded = [_fold(l) + (" suppri" if _CUT_TO_ZERO.search(l) else "") for l in lines]
+    folded = [_fold(l) for l in lines]
     keep: set[int] = set()
     size = 0
     for i, line in enumerate(lines):  # the opening, which says what the article is about
@@ -477,66 +465,6 @@ def _law_excerpt(text: str, question: str, limit: int) -> str:
     if last < len(lines) - 1:
         out.append("[…]")
     return "\n".join(out)
-
-
-def _stems(text: str) -> set[str]:
-    """The words of a text as search compares them: unaccented, lowercased, cut
-    to six letters (salariale and salariales, supprimé and suppression)."""
-    return {_fold(w)[:6] for w in re.findall(r"[\w-]{4,}", text) if _fold(w) not in _EXCERPT_STOPWORDS}
-
-
-def _table_rows() -> list[tuple[str, set[str]]]:
-    """(article id, words) for each row of the finance laws' tables."""
-    global _TABLE_ROWS
-    if _TABLE_ROWS is not None:
-        return _TABLE_ROWS
-    _TABLE_ROWS = []
-    if _codes_collection is None:
-        return _TABLE_ROWS
-    try:
-        got = _codes_collection.get(
-            where={"code": {"$in": [c for c in CODE_LABELS if "finances" in c]}},
-            include=["documents"],
-        )
-    except Exception as e:
-        logger.warning(f"Finance-law table rows not indexed: {e}")
-        return _TABLE_ROWS
-    for id_, doc in zip(got["ids"], got["documents"]):
-        lines = doc.split("\n")
-        head: set[str] = set()
-        for i, line in enumerate(lines):
-            if not line.startswith("|"):
-                head = set()
-            elif line.startswith("| ---"):
-                continue
-            elif i + 1 < len(lines) and lines[i + 1].startswith("| ---"):
-                head = _stems(line)
-            else:
-                words = _stems(line) | head
-                if _CUT_TO_ZERO.search(line):
-                    words.add("suppri")
-                _TABLE_ROWS.append((id_, words))
-    _ROW_DF.update(w for _, words in _TABLE_ROWS for w in words)
-    logger.info(f"⚖️  {len(_TABLE_ROWS)} lignes de tableaux des lois de finances indexées")
-    return _TABLE_ROWS
-
-
-def _table_row_articles(question: str, n: int = 3) -> list[str]:
-    """Finance-law articles with a table row that shares at least two words
-    with the question, best row first (words weighted by rarity)."""
-    rows = _table_rows()
-    asked = _stems(question)
-    if len(asked) < 2 or not rows:
-        return []
-    best: dict[str, float] = {}
-    for id_, words in rows:
-        hit = asked & words
-        if len(hit) < 2:
-            continue
-        score = sum(math.log(1 + len(rows) / (1 + _ROW_DF[w])) for w in hit)
-        if score > best.get(id_, 0):
-            best[id_] = score
-    return sorted(best, key=lambda i: -best[i])[:n]
 
 
 def build_codes_prompt(question: str, extracts: list["ContextArticle"]) -> str:
@@ -1317,26 +1245,10 @@ def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchR
                     url=meta.get("source_url", ""), snippet=doc[:400] + "..." if len(doc) > 400 else doc,
                     distance=0.0, id=id_,
                 ))
-    # Then the finance-law articles whose table has a row on the question
-    rows = [i for i in _table_row_articles(question) if i not in named]
-    if rows:
-        got = _codes_collection.get(ids=rows, include=["documents", "metadatas"])
-        by_id = dict(zip(got["ids"], zip(got["metadatas"], got["documents"])))
-        dists = dict(zip(raw["ids"][0], raw["distances"][0]))
-        for id_ in rows:
-            if id_ in by_id:
-                meta, doc = by_id[id_]
-                results.append(ArticleResult(
-                    title=_code_title(meta), date="", source="Journal Officiel",
-                    category=CODE_LABELS.get(meta.get("code", ""), meta.get("code", "")),
-                    url=meta.get("source_url", ""), snippet=doc[:400] + "..." if len(doc) > 400 else doc,
-                    distance=round(dists.get(id_, 0.0), 4), id=id_,
-                ))
-    first = set(named) | set(rows)
     for id_, meta, dist, doc in zip(
         raw["ids"][0], raw["metadatas"][0], raw["distances"][0], raw["documents"][0]
     ):
-        if dist >= CODES_RELEVANCE_THRESHOLD or id_ in first:
+        if dist >= CODES_RELEVANCE_THRESHOLD or id_ in named:
             continue
         results.append(ArticleResult(
             title    = _code_title(meta),
@@ -1350,7 +1262,7 @@ def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchR
         ))
         if len(results) >= n_results:
             break
-    return SearchResponse(question=question, results=results[:max(n_results, len(named))])
+    return SearchResponse(question=question, results=results)
 
 
 def _fetch_code_extracts(ids: list[str]) -> list[ContextArticle]:
