@@ -110,6 +110,7 @@ DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --pro
 $DC up -d --build
 $DC exec ollama ollama pull embeddinggemma
 $DC exec ollama ollama pull qwen3:1.7b   # modèle de secours
+$DC exec ollama ollama pull snowflake-arctic-embed2   # recherche dans les codes
 # Comptes et archive des comptes rendus, copiés une fois dans le volume
 docker cp auth.db "$($DC ps -q api)":/data/auth.db
 docker cp reports_archive.db "$($DC ps -q api)":/data/reports_archive.db
@@ -118,6 +119,22 @@ $DC exec -u root api chown -R 10001:10001 /data
 $DC restart api
 crontab deploy/crontab
 ```
+
+### Index de recherche des codes
+
+La recherche dans les codes passe par une seconde collection, construite à
+partir des articles : les articles, et une entrée par ligne des tableaux des
+lois de finances (`codes_search.py`). À reconstruire chaque fois que
+`codes_chroma_db` change, puis redémarrer l'API (environ dix minutes sur deux
+processeurs) :
+
+```bash
+$DC exec api python scripts/create_codes_search_db.py
+$DC restart api
+```
+
+Sans elle, l'API cherche dans les articles entiers comme avant (message
+« Recherche des codes sur les articles entiers » dans les journaux).
 
 ## 5. L'adresse
 

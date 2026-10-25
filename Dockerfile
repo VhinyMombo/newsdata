@@ -81,7 +81,7 @@ RUN useradd --create-home --uid 10001 kiosque \
     && chown -R kiosque:kiosque /data /app
 
 COPY --chown=kiosque:kiosque api.py auth.py llm.py report_archive.py report_pdf.py \
-     lekiosque_theme.py push_notify.py mailer.py oauth.py ./
+     lekiosque_theme.py push_notify.py mailer.py oauth.py codes_search.py ./
 COPY --chown=kiosque:kiosque scripts/ ./scripts/
 COPY --chown=kiosque:kiosque assets/report/ ./assets/report/
 

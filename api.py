@@ -38,6 +38,7 @@ from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import BaseModel, Field
 
 import auth
+import codes_search
 import llm
 import mailer
 import oauth
@@ -49,6 +50,16 @@ PERSIST_DIR = ROOT_DIR / "newspaper_chroma_db"
 COLLECTION_NAME = "newspaper_gabon"
 CODES_PERSIST_DIR = ROOT_DIR / "codes_chroma_db"
 CODES_COLLECTION_NAME = "codes_gabon"
+# Search runs on a second collection built from the first (codes_search.py,
+# scripts/create_codes_search_db.py): articles, and one document per row of the
+# finance laws' tables, embedded with their own model. snowflake-arctic-embed2
+# found as many right articles as embeddinggemma on that index and embeds a
+# question about ten times faster on CPU; it wants "query: " before a question.
+CODES_SEARCH_COLLECTION_NAME = "codes_gabon_search"
+CODES_EMBED_MODEL = os.getenv("CODES_EMBED_MODEL", "snowflake-arctic-embed2")
+CODES_QUERY_PREFIX = os.getenv(
+    "CODES_QUERY_PREFIX", "query: " if CODES_EMBED_MODEL.startswith("snowflake-arctic") else ""
+)
 EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "embeddinggemma")
 OLLAMA_URL  = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 RELEVANCE_THRESHOLD  = float(os.getenv("RELEVANCE_THRESHOLD",  "1.7"))
@@ -162,6 +173,19 @@ try:
 except Exception as e:
     _codes_collection = None
     logger.warning(f"Codes juridiques indisponibles ({e}) — corpus 'codes' désactivé")
+
+# Without the search collection, search falls back to the articles themselves
+_codes_search = None
+_codes_embedder = _embedder
+if _codes_collection is not None:
+    try:
+        _codes_search = chromadb.PersistentClient(
+            path=str(CODES_PERSIST_DIR)
+        ).get_collection(CODES_SEARCH_COLLECTION_NAME)
+        _codes_embedder = OllamaEmbeddings(model=CODES_EMBED_MODEL, num_ctx=2048)
+        logger.info(f"⚖️  {_codes_search.count()} documents de recherche ({CODES_EMBED_MODEL})")
+    except Exception as e:
+        logger.warning(f"Recherche des codes sur les articles entiers ({e})")
 
 CODE_LABELS = {
     "codes_minier":         "Code minier",
@@ -411,12 +435,13 @@ def _fold(s: str) -> str:
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
 
 
-def _law_excerpt(text: str, question: str, limit: int) -> str:
+def _law_excerpt(text: str, question: str, limit: int, rows: list[str] = ()) -> str:
     """The article as the model should read it. A long one (a finance law's
-    staff or mission tables) is cut down to its opening, then the lines that
-    share a word with the question, each with the title and header row of its
-    table, in the article's order; "[…]" marks what was left out. A plain cut
-    would drop the row asked about whenever it sits past the limit."""
+    staff or mission tables) is cut down to its opening, then the table rows
+    closest to the question (`rows`, their labels, closest first), then the
+    lines that share a word with the question, each with the title and header row of its table, in the article's
+    order; "[…]" marks what was left out. A plain cut would drop the row asked
+    about whenever it sits past the limit."""
     if len(text) <= limit:
         return text
     stems = {_fold(w)[:6] for w in re.findall(r"[\w-]{4,}", question) if _fold(w) not in _EXCERPT_STOPWORDS}
@@ -447,6 +472,11 @@ def _law_excerpt(text: str, question: str, limit: int) -> str:
         ((sum(s in f for s in stems), i) for i, f in enumerate(folded)),
         key=lambda t: (-t[0], t[1]),
     )
+    if rows:
+        cells = {i: {c.strip() for c in l.strip().strip("|").split("|")}
+                 for i, l in enumerate(lines) if l.startswith("|")}
+        matched = [i for r in rows for i, c in cells.items() if r in c]
+        scored = [(float("inf"), i) for i in matched] + scored
     for score, i in scored:
         if score == 0:
             break
@@ -471,7 +501,7 @@ def build_codes_prompt(question: str, extracts: list["ContextArticle"]) -> str:
     """User-turn prompt for the legal corpus: extracts + question."""
     blocks = []
     for ext in extracts:
-        blocks.append(f"[{ext.title}]\n{_law_excerpt(ext.full_text, question, CODES_EXCERPT_CHARS)}")
+        blocks.append(f"[{ext.title}]\n{_law_excerpt(ext.full_text, question, CODES_EXCERPT_CHARS, ext.rows)}")
     context = "\n\n---------------------\n\n".join(blocks)
 
     return (
@@ -579,6 +609,9 @@ class ContextArticle(BaseModel):
     source: str = ""
     snippet: str = ""
     full_text: str = ""
+    # Codes corpus: labels of the table rows closest to the question, kept in
+    # the excerpt whatever its length
+    rows: list[str] = []
     # Position in the reader's source list, which the answer cites as [n]
     ref: int = 0
 
@@ -1210,23 +1243,41 @@ def _named_code_articles(question: str) -> list[str]:
     return ids[:3]
 
 
-def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchResponse":
+def _codes_hits(embed_text: str, n: int) -> list[tuple[str, float, str, dict]]:
+    """(article id, distance, matching text, its metadata) for the n articles
+    closest to the question. On the search collection the matching text is the
+    table row or article that ranked the article."""
+    if _codes_search is None:
+        raw = _codes_collection.query(
+            query_embeddings=[_codes_embedder.embed_query(embed_text)],
+            n_results=min(n, _codes_collection.count() or 1),
+            include=["documents", "metadatas", "distances"],
+        )
+        return [(i, d, doc, m) for i, m, d, doc in
+                zip(raw["ids"][0], raw["metadatas"][0], raw["distances"][0], raw["documents"][0])]
+    # Several rows of one article can come first: fetch enough documents for
+    # n distinct articles
+    raw = _codes_search.query(
+        query_embeddings=[_codes_embedder.embed_query(CODES_QUERY_PREFIX + embed_text)],
+        n_results=min(80, _codes_search.count() or 1),
+        include=["documents", "metadatas", "distances"],
+    )
+    return codes_search.best_per_article(raw, n)
+
+
+def _search_codes(question: str, embed_text: str, n_results: int) -> "SearchResponse":
     if _codes_collection is None:
         raise HTTPException(
             status_code=503,
             detail="Le corpus des codes juridiques n'est pas disponible.",
         )
     try:
-        raw = _codes_collection.query(
-            query_embeddings=[q_vec],
-            n_results=min(30, _codes_collection.count() or 1),
-            include=["documents", "metadatas", "distances"],
-        )
+        hits = _codes_hits(embed_text, 30)
     except Exception as e:
-        logger.error(f"Codes ChromaDB query error: {e}")
+        logger.error(f"Codes search error: {e}")
         raise HTTPException(
-            status_code=500,
-            detail="Erreur lors de la recherche dans les codes juridiques.",
+            status_code=503,
+            detail="Le service d'embedding (Ollama) est indisponible. Vérifiez qu'Ollama est démarré.",
         )
 
     results: list[ArticleResult] = []
@@ -1245,18 +1296,23 @@ def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchR
                     url=meta.get("source_url", ""), snippet=doc[:400] + "..." if len(doc) > 400 else doc,
                     distance=0.0, id=id_,
                 ))
-    for id_, meta, dist, doc in zip(
-        raw["ids"][0], raw["metadatas"][0], raw["distances"][0], raw["documents"][0]
-    ):
-        if dist >= CODES_RELEVANCE_THRESHOLD or id_ in named:
+    # Titles and links come from the articles; a table row is the snippet, as
+    # it says why its article was found
+    hits = [h for h in hits if h[1] < CODES_RELEVANCE_THRESHOLD and h[0] not in named][:n_results]
+    got = _codes_collection.get(ids=[h[0] for h in hits], include=["documents", "metadatas"])
+    by_id = dict(zip(got["ids"], zip(got["metadatas"], got["documents"])))
+    for id_, dist, text, hit_meta in hits:
+        if id_ not in by_id:
             continue
+        meta, doc = by_id[id_]
+        snippet = text if hit_meta.get("kind") == "row" else doc
         results.append(ArticleResult(
             title    = _code_title(meta),
             date     = "",
             source   = "Journal Officiel",
             category = CODE_LABELS.get(meta.get("code", ""), meta.get("code", "")),
             url      = meta.get("source_url", ""),
-            snippet  = doc[:400] + "..." if len(doc) > 400 else doc,
+            snippet  = snippet[:400] + "..." if len(snippet) > 400 else snippet,
             distance = round(dist, 4),
             id       = id_,
         ))
@@ -1265,13 +1321,39 @@ def _search_codes(question: str, q_vec: list[float], n_results: int) -> "SearchR
     return SearchResponse(question=question, results=results)
 
 
-def _fetch_code_extracts(ids: list[str]) -> list[ContextArticle]:
+def _closest_rows(ids: list[str], question: str, per_article: int = 8) -> dict[str, list[str]]:
+    """Labels of the table rows closest to the question, per finance-law
+    article, so the excerpt keeps them even when the article runs past its
+    limit ("Des subventions ont elle été supprimées ?" is answered by several
+    rows of one table)."""
+    if _codes_search is None or not question:
+        return {}
+    try:
+        raw = _codes_search.query(
+            query_embeddings=[_codes_embedder.embed_query(CODES_QUERY_PREFIX + question)],
+            n_results=min(20 * len(ids), _codes_search.count() or 1),
+            where={"$and": [{"article_id": {"$in": ids}}, {"kind": "row"}]},
+            include=["metadatas"],
+        )
+    except Exception as e:
+        logger.warning(f"/answer: closest table rows not found ({e})")
+        return {}
+    rows: dict[str, list[str]] = {}
+    for meta in raw["metadatas"][0]:
+        labels = rows.setdefault(meta["article_id"], [])
+        if meta.get("label") and len(labels) < per_article:
+            labels.append(meta["label"])
+    return rows
+
+
+def _fetch_code_extracts(ids: list[str], question: str = "") -> list[ContextArticle]:
     """Fetch code articles by Chroma id, preserving the caller's order."""
     if not ids or _codes_collection is None:
         return []
     res = _codes_collection.get(ids=ids, include=["documents", "metadatas"])
     by_id = {i: (doc, meta) for i, doc, meta in
              zip(res["ids"], res["documents"], res["metadatas"])}
+    rows = _closest_rows(list(by_id), question)
     extracts = []
     for id_ in ids:
         if id_ not in by_id:
@@ -1282,6 +1364,7 @@ def _fetch_code_extracts(ids: list[str]) -> list[ContextArticle]:
             title     = _code_title(meta),
             source    = "Journal Officiel",
             full_text = doc,
+            rows      = rows.get(id_, []),
         ))
     return extracts
 
@@ -1384,6 +1467,12 @@ def search(request: Request, req: SearchRequest):
     embed_text = question
     if req.previous_question.strip() and is_followup(question):
         embed_text = f"{req.previous_question.strip()}\n{question}"
+
+    # Legal corpus: semantic search over code articles and table rows, with its
+    # own embedding model, no temporal logic
+    if req.corpus == "codes":
+        return _search_codes(question, embed_text, req.n_results)
+
     try:
         q_vec = _embedder.embed_query(embed_text)
     except Exception as e:
@@ -1393,9 +1482,6 @@ def search(request: Request, req: SearchRequest):
             detail="Le service d'embedding (Ollama) est indisponible. Vérifiez qu'Ollama est démarré.",
         )
 
-    # Legal corpus: plain semantic search over code articles, no temporal logic
-    if req.corpus == "codes":
-        return _search_codes(question, q_vec, req.n_results)
 
     # 3. Retrieve candidates from ChromaDB.
     #    Temporal queries are filtered to their window server-side via the
@@ -1537,7 +1623,7 @@ def answer(request: Request, req: AnswerRequest):
             )
     try:
         if req.corpus == "codes":
-            context_items = _fetch_code_extracts(req.ids)
+            context_items = _fetch_code_extracts(req.ids, req.question.strip())
         else:
             context_items = _fetch_articles(req.urls)
     except Exception as e:
