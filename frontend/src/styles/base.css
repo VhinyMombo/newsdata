@@ -86,7 +86,9 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-intro { color: var(--ink-soft); max-width: 62ch; }
 .k-muted { color: var(--muted); font-size: 0.86rem; }
 .k-page-head { margin-bottom: clamp(24px, 3vw, 36px); }
-.k-hint { display: flex; gap: 8px; align-items: center; font-size: 0.86rem; color: var(--muted); margin-top: 18px; }
+/* The sentence is one flex item: bare text and its link would each become a column */
+.k-hint { display: flex; gap: 8px; align-items: flex-start; font-size: 0.86rem; color: var(--muted); margin-top: 18px; }
+.k-hint svg { flex: none; margin-top: 0.2em; }
 .k-hint a { color: var(--green); }
 .k-empty { padding: 32px 0; display: grid; gap: 12px; justify-items: start; color: var(--ink-soft); }
 

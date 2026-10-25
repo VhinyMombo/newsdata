@@ -83,7 +83,7 @@ function SinceLastVisit({ session, corpus, ask }) {
 
   if (!user) return null;
   if (!active.length) {
-    return <p className="k-hint"><Star size={13} /> Astuce : suivez un sujet, un journal ou un mot-clé dans <a href="#/tendances">Tendances</a> (icône étoile) pour retrouver ici ce qui a bougé.</p>;
+    return <p className="k-hint"><Star size={13} /><span>Astuce : suivez un sujet, un journal ou un mot-clé dans <a href="#/tendances">Tendances</a> (icône étoile) pour retrouver ici ce qui a bougé.</span></p>;
   }
   if (!deltas.length) return null;
   return (
