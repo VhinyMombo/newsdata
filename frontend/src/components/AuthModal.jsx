@@ -112,9 +112,21 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
       .then(r => r.json())
       .then(d => setVapidKey(d.key || ''))
       .catch(() => setVapidKey(''));
+    // A device can hold a subscription the server no longer ties to this reader
+    // (made under another account, or kept by the browser after an account was
+    // deleted): register it again under whoever is signed in, or nothing reaches it
     navigator.serviceWorker.ready
       .then(reg => reg.pushManager.getSubscription())
-      .then(sub => setPushEnabled(!!sub))
+      .then(sub => {
+        setPushEnabled(!!sub);
+        if (!sub) return;
+        const json = sub.toJSON();
+        return fetch(`${API_URL}/push/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+        }).catch(() => { /* offline: the next opening of the profile retries */ });
+      })
       .catch(() => setPushEnabled(false));
   }, [mode, authToken, pushSupported]);
 
