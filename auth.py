@@ -62,6 +62,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+-- What a reader asked to be notified of, across all their devices; the alert on
+-- followed topics needs no row (following a topic is the opt-in)
+CREATE TABLE IF NOT EXISTS notification_prefs (
+    user_id     INTEGER PRIMARY KEY,
+    daily_brief INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL,
@@ -315,6 +322,33 @@ def list_push_subscriptions_with_follows() -> list[dict]:
         return result
 
 
+def get_notification_prefs(user_id: int) -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT daily_brief FROM notification_prefs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return {"daily_brief": bool(row and row["daily_brief"])}
+
+
+def set_daily_brief(user_id: int, on: bool) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO notification_prefs (user_id, daily_brief) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET daily_brief = excluded.daily_brief",
+            (user_id, int(on)),
+        )
+
+
+def list_daily_brief_subscriptions() -> list[dict]:
+    """Every push subscription of the readers who asked for the daily brief."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT ps.endpoint, ps.p256dh, ps.auth_key FROM push_subscriptions ps "
+            "JOIN notification_prefs np ON np.user_id = ps.user_id WHERE np.daily_brief = 1"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ── Assistant conversations (per user) ──────────────────────────────────────
 
 MAX_CONVERSATIONS = 100
@@ -547,7 +581,7 @@ def exchange_login_code(code: str) -> tuple[dict, str]:
 def delete_user(user_id: int) -> None:
     """Erase the account and everything attached to it, at the reader's request."""
     with _conn() as conn:
-        for table in ("sessions", "follows", "push_subscriptions", "password_resets",
+        for table in ("sessions", "follows", "push_subscriptions", "notification_prefs", "password_resets",
                       "conversations", "identities", "login_codes", "app_logins"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))

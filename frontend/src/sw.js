@@ -45,8 +45,12 @@ self.addEventListener('notificationclick', (event) => {
   const url = event.notification.data?.url || '/'
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
+      // An open app is brought forward on the notification's page (the evening
+      // brief opens that brief), not left on whatever screen it was showing
       for (const client of clientsList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) return client.focus()
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus().then((c) => (c && 'navigate' in c ? c.navigate(url) : c))
+        }
       }
       return self.clients.openWindow(url)
     })

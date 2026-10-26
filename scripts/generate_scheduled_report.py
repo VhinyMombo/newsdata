@@ -5,8 +5,9 @@ the local archive (report_archive.py, reports_archive.db), without needing
 api.py's HTTP server running — imports api.py directly, same pattern as
 scripts/backfill_categories.py.
 
-This only produces and archives the text. There is no delivery mechanism
-yet: that needs SMTP credentials and a recipient-management decision first.
+The daily run then notifies the readers who turned the brief on in their
+profile (push_notify.send_daily_brief). There is no e-mail delivery yet: that
+needs SMTP credentials and a recipient-management decision first.
 Once those exist, a delivery step can read the freshly archived report
 (report_archive.latest_id(kind)) and send it, without touching this script.
 
@@ -67,8 +68,13 @@ def main():
 
     # Spike notifications use a fixed "today vs trailing week" window (see
     # push_notify.py), so they only make sense to run once a day, alongside
-    # the daily report — not on the weekly run.
+    # the daily report — not on the weekly run. The brief's own notification
+    # goes first: it is the one readers asked for at this hour.
     if daily:
+        try:
+            push_notify.send_daily_brief(rid, text)
+        except Exception as e:
+            print(f"[{kind}] daily brief notification failed: {e}", file=sys.stderr)
         try:
             push_notify.send_spike_notifications()
         except Exception as e:

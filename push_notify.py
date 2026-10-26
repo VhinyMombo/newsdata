@@ -1,4 +1,5 @@
-"""push_notify.py — Web Push notifications for followed topics that spike.
+"""push_notify.py — Web Push notifications: the daily brief for readers who
+asked for it in their profile, and an alert on followed topics that spike.
 
 Server-side port of the "spiked" half of computeFollowDeltas
 (frontend/src/App.jsx:2403-2432): same threshold (today's count is at least
@@ -75,13 +76,81 @@ def _spiked_follows(follows: list[dict], since_rows: list[tuple], baseline_rows:
     return spiked
 
 
-def send_spike_notifications() -> None:
+MONTHS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+          "août", "septembre", "octobre", "novembre", "décembre")
+
+BRIEF_BODY_CHARS = 180
+
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s")
+
+
+def _vapid() -> tuple[str, str] | None:
     vapid_private_key = os.getenv("VAPID_PRIVATE_KEY")
     if not api.VAPID_PUBLIC_KEY or not vapid_private_key:
         log.warning("VAPID keys not configured (.env) — skipping push notifications.")
-        return
+        return None
+    return vapid_private_key, os.getenv("VAPID_SUBJECT", "mailto:admin@example.com")
 
-    vapid_claims_sub = os.getenv("VAPID_SUBJECT", "mailto:admin@example.com")
+
+def _send(subscriptions: list[dict], payload: str, vapid: tuple[str, str]) -> tuple[int, int]:
+    """Push one payload to each subscription; drop those the push service says are gone."""
+    vapid_private_key, vapid_claims_sub = vapid
+    sent, pruned = 0, 0
+    for sub in subscriptions:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub["endpoint"],
+                    "keys": {"p256dh": sub["p256dh"], "auth": sub["auth_key"]},
+                },
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": vapid_claims_sub},
+            )
+            sent += 1
+        except WebPushException as e:
+            status = getattr(e.response, "status_code", None)
+            if status in (404, 410):
+                auth.remove_push_subscription_by_endpoint(sub["endpoint"])
+                pruned += 1
+            else:
+                log.warning("webpush failed for endpoint %s: %s", sub["endpoint"][:50], e)
+    return sent, pruned
+
+
+def brief_title(day) -> str:
+    return f"Le résumé du {'1er' if day.day == 1 else day.day} {MONTHS[day.month - 1]}"
+
+
+def brief_body(text: str) -> str:
+    """The brief's opening sentence, without its markdown, cut on a word if too long."""
+    first = (text or "").strip().split("\n\n", 1)[0]
+    first = re.sub(r"[*_#>`]+", "", first).strip()
+    first = _SENTENCE_END_RE.split(first, 1)[0]
+    if len(first) <= BRIEF_BODY_CHARS:
+        return first
+    return first[:BRIEF_BODY_CHARS].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def send_daily_brief(report_id: int, text: str) -> None:
+    """Called once the evening brief is archived: one notification per device of
+    each reader who turned it on, opening that brief in the Éditions."""
+    vapid = _vapid()
+    if not vapid:
+        return
+    payload = json.dumps({
+        "title": brief_title(api.gabon_today()),
+        "body": brief_body(text),
+        "url": f"/#/editions/archive?id={report_id}",
+    })
+    sent, pruned = _send(auth.list_daily_brief_subscriptions(), payload, vapid)
+    log.info("daily brief: %d notifications sent, %d stale subscriptions pruned.", sent, pruned)
+
+
+def send_spike_notifications() -> None:
+    vapid = _vapid()
+    if not vapid:
+        return
 
     _start, _now, rows = api._collect_week(days=7)
     today_str = api.gabon_today().isoformat()
@@ -105,26 +174,8 @@ def send_spike_notifications() -> None:
             f"{spiked[0]['baseline_count']} en moyenne récemment."
         )
         payload = json.dumps({"title": title, "body": body, "url": "/"})
-
-        for sub in entry["subscriptions"]:
-            try:
-                webpush(
-                    subscription_info={
-                        "endpoint": sub["endpoint"],
-                        "keys": {"p256dh": sub["p256dh"], "auth": sub["auth_key"]},
-                    },
-                    data=payload,
-                    vapid_private_key=vapid_private_key,
-                    vapid_claims={"sub": vapid_claims_sub},
-                )
-                sent += 1
-            except WebPushException as e:
-                status = getattr(e.response, "status_code", None)
-                if status in (404, 410):
-                    auth.remove_push_subscription_by_endpoint(sub["endpoint"])
-                    pruned += 1
-                else:
-                    log.warning("webpush failed for endpoint %s: %s", sub["endpoint"][:50], e)
+        s, p = _send(entry["subscriptions"], payload, vapid)
+        sent, pruned = sent + s, pruned + p
 
     log.info("push_notify: %d notifications sent, %d stale subscriptions pruned.", sent, pruned)
 

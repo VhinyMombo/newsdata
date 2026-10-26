@@ -89,6 +89,12 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
   const [pushBusy, setPushBusy] = useState(false);
   const [pushErr, setPushErr] = useState('');
   const [vapidKey, setVapidKey] = useState('');
+  // The evening brief is a per-reader choice kept on the server (all their devices);
+  // null while loading
+  const [dailyBrief, setDailyBrief] = useState(null);
+  // On an iPhone, Safari offers notifications only to the app added to the home screen
+  const iosBrowser = typeof window !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent)
+    && !window.navigator.standalone;
 
   useEffect(() => { setProfileName(user?.display_name || ''); }, [user]);
 
@@ -112,6 +118,34 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
       .catch(() => setPushEnabled(false));
   }, [mode, authToken, pushSupported]);
 
+  useEffect(() => {
+    if (mode !== 'profile' || !authToken) return;
+    fetch(`${API_URL}/push/preferences`, { headers: { Authorization: `Bearer ${authToken}` } })
+      .then(r => (r.ok ? r.json() : { daily_brief: false }))
+      .then(d => setDailyBrief(!!d.daily_brief))
+      .catch(() => setDailyBrief(false));
+  }, [mode, authToken]);
+
+  // Ask the browser for permission and register this device with the server
+  const subscribeDevice = useCallback(async () => {
+    if (!vapidKey) throw new Error('Notifications indisponibles pour le moment.');
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') throw new Error('Notifications refusées dans le navigateur.');
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+    const json = sub.toJSON();
+    const res = await fetch(`${API_URL}/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+    if (!res.ok) throw new Error("Échec de l'enregistrement des notifications.");
+    setPushEnabled(true);
+  }, [authToken, vapidKey]);
+
   const togglePush = useCallback(async () => {
     setPushBusy(true); setPushErr('');
     try {
@@ -125,27 +159,34 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
         setPushEnabled(false);
         return;
       }
-      if (!vapidKey) throw new Error('Notifications indisponibles pour le moment.');
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') throw new Error('Notifications refusées dans le navigateur.');
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      });
-      const json = sub.toJSON();
-      const res = await fetch(`${API_URL}/push/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
-      });
-      if (!res.ok) throw new Error("Échec de l'enregistrement des notifications.");
-      setPushEnabled(true);
+      await subscribeDevice();
     } catch (e) {
       setPushErr(e.message || 'Erreur notifications.');
     } finally {
       setPushBusy(false);
     }
-  }, [authToken, vapidKey]);
+  }, [authToken, subscribeDevice]);
+
+  // Turning the brief on from a device that does not receive notifications yet
+  // registers it at once: otherwise the choice would reach no screen
+  const toggleDailyBrief = useCallback(async () => {
+    const on = !dailyBrief;
+    setPushBusy(true); setPushErr('');
+    try {
+      if (on && !pushEnabled) await subscribeDevice();
+      const res = await fetch(`${API_URL}/push/preferences`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ daily_brief: on }),
+      });
+      if (!res.ok) throw new Error("Échec de l'enregistrement du réglage.");
+      setDailyBrief(on);
+    } catch (e) {
+      setPushErr(e.message || 'Erreur notifications.');
+    } finally {
+      setPushBusy(false);
+    }
+  }, [authToken, dailyBrief, pushEnabled, subscribeDevice]);
 
   const unfollow = useCallback((type, value) => {
     setFollows(prev => prev.filter(f => !(f.type === type && f.value === value)));
@@ -330,11 +371,25 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
               )}
             </div>
 
-            {pushSupported && (
-              <div className="auth-follows">
-                <label className="auth-label">Notifications</label>
+            <div className="auth-follows">
+              <label className="auth-label">Notifications</label>
+              {pushSupported ? (<>
+                <label className="auth-check">
+                  <input
+                    type="checkbox"
+                    checked={!!dailyBrief}
+                    onChange={toggleDailyBrief}
+                    disabled={pushBusy || dailyBrief === null}
+                  />
+                  <span>
+                    Le résumé du jour
+                    <small>Chaque soir à 20h30, l'essentiel de l'actualité gabonaise de la journée.</small>
+                  </span>
+                </label>
                 <p className="chat-empty-sub">
-                  Recevez une alerte quand un sujet suivi connaît un pic d'actualité.
+                  {pushEnabled
+                    ? "Cet appareil reçoit vos notifications, ainsi qu'une alerte quand un sujet suivi connaît un pic d'actualité."
+                    : "Cet appareil ne reçoit pas encore de notifications."}
                 </p>
                 <button
                   type="button"
@@ -342,11 +397,17 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                   onClick={togglePush}
                   disabled={pushBusy}
                 >
-                  {pushBusy ? '…' : pushEnabled ? 'Désactiver les notifications' : 'Activer les notifications'}
+                  {pushBusy ? '…' : pushEnabled ? 'Désactiver sur cet appareil' : 'Activer sur cet appareil'}
                 </button>
                 {pushErr && <p className="auth-error">{pushErr}</p>}
-              </div>
-            )}
+              </>) : (
+                <p className="chat-empty-sub">
+                  {iosBrowser
+                    ? "Sur iPhone, les notifications passent par l'application : ajoutez Le Kiosque à l'écran d'accueil (Partager, puis « Sur l'écran d'accueil »), ouvrez-le, puis revenez ici."
+                    : 'Ce navigateur ne permet pas les notifications.'}
+                </p>
+              )}
+            </div>
 
             <button type="button" className="auth-logout" onClick={onLogout}>Se déconnecter</button>
 

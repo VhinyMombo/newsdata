@@ -179,6 +179,29 @@
   border-top: 1px solid var(--border);
 }
 
+.auth-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0 6px;
+  font-size: 0.86rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.auth-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+}
+.auth-check small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+
 .auth-follows-list {
   display: flex;
   flex-direction: column;

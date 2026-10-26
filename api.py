@@ -786,6 +786,10 @@ class PushSubscribeRequest(BaseModel):
     keys: PushKeys
 
 
+class NotificationPrefsRequest(BaseModel):
+    daily_brief: bool
+
+
 def _bearer_token(authorization: str | None = Header(default=None)) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -1077,6 +1081,17 @@ def push_subscribe(req: PushSubscribeRequest, user: dict = Depends(require_user)
 def push_unsubscribe(endpoint: str, user: dict = Depends(require_user)):
     auth.remove_push_subscription(user["id"], endpoint)
     return {"status": "ok"}
+
+
+@app.get("/push/preferences")
+def push_preferences(user: dict = Depends(require_user)):
+    return auth.get_notification_prefs(user["id"])
+
+
+@app.put("/push/preferences")
+def put_push_preferences(req: NotificationPrefsRequest, user: dict = Depends(require_user)):
+    auth.set_daily_brief(user["id"], req.daily_brief)
+    return auth.get_notification_prefs(user["id"])
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
