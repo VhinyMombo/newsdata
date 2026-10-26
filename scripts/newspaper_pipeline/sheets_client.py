@@ -44,6 +44,7 @@ ALL_TABS = [
     "7joursinfo", "ethiquemediagabon", "focusgroupemedia",
     "gabonallsport", "gabonquotidien", "directinfosgabon", "insidenews241",
     "kongossanews", "agpgabon", "gabonclic", "gabonmailinfos",
+    "medias241",
 ]
 
 # Google Sheets has a hard limit of 50,000 characters per cell.

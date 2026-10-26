@@ -68,6 +68,7 @@ SCRAPERS=(
     "scrape_agpgabon.py:agpgabon:AGP Gabon"
     "scrape_gabonclic.py:gabonclic:Gabonclic"
     "scrape_gabonmailinfos.py:gabonmailinfos:Gabon Mail Infos"
+    "scrape_medias241.py:medias241:Médias241"
 )
 
 notify "Scraping all sources in parallel..."
