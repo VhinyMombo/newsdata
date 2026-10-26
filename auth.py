@@ -65,8 +65,9 @@ CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(use
 -- What a reader asked to be notified of, across all their devices; the alert on
 -- followed topics needs no row (following a topic is the opt-in)
 CREATE TABLE IF NOT EXISTS notification_prefs (
-    user_id     INTEGER PRIMARY KEY,
-    daily_brief INTEGER NOT NULL DEFAULT 0,
+    user_id       INTEGER PRIMARY KEY,
+    daily_brief   INTEGER NOT NULL DEFAULT 0,
+    weekly_review INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE TABLE IF NOT EXISTS password_resets (
@@ -133,6 +134,7 @@ def _conn():
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(_SCHEMA)
+        _migrate_notification_prefs(conn)
         yield conn
         conn.commit()
     finally:
@@ -322,29 +324,44 @@ def list_push_subscriptions_with_follows() -> list[dict]:
         return result
 
 
+# The editions a reader can be notified of; also the column names, so only
+# these ever reach the SQL below
+NOTIFICATION_PREFS = ("daily_brief", "weekly_review")
+
+
+def _migrate_notification_prefs(conn: sqlite3.Connection) -> None:
+    # The table first shipped with daily_brief alone (26/10/2026)
+    if "weekly_review" not in {r["name"] for r in conn.execute("PRAGMA table_info(notification_prefs)")}:
+        conn.execute("ALTER TABLE notification_prefs ADD COLUMN weekly_review INTEGER NOT NULL DEFAULT 0")
+
+
 def get_notification_prefs(user_id: int) -> dict:
     with _conn() as conn:
         row = conn.execute(
-            "SELECT daily_brief FROM notification_prefs WHERE user_id = ?", (user_id,)
+            f"SELECT {', '.join(NOTIFICATION_PREFS)} FROM notification_prefs WHERE user_id = ?", (user_id,)
         ).fetchone()
-        return {"daily_brief": bool(row and row["daily_brief"])}
+        return {k: bool(row and row[k]) for k in NOTIFICATION_PREFS}
 
 
-def set_daily_brief(user_id: int, on: bool) -> None:
+def set_notification_pref(user_id: int, pref: str, on: bool) -> None:
+    if pref not in NOTIFICATION_PREFS:
+        raise AuthError("Réglage de notification inconnu.")
     with _conn() as conn:
         conn.execute(
-            "INSERT INTO notification_prefs (user_id, daily_brief) VALUES (?, ?) "
-            "ON CONFLICT(user_id) DO UPDATE SET daily_brief = excluded.daily_brief",
+            f"INSERT INTO notification_prefs (user_id, {pref}) VALUES (?, ?) "
+            f"ON CONFLICT(user_id) DO UPDATE SET {pref} = excluded.{pref}",
             (user_id, int(on)),
         )
 
 
-def list_daily_brief_subscriptions() -> list[dict]:
-    """Every push subscription of the readers who asked for the daily brief."""
+def list_subscriptions_for(pref: str) -> list[dict]:
+    """Every push subscription of the readers who turned this edition on."""
+    if pref not in NOTIFICATION_PREFS:
+        raise AuthError("Réglage de notification inconnu.")
     with _conn() as conn:
         rows = conn.execute(
             "SELECT ps.endpoint, ps.p256dh, ps.auth_key FROM push_subscriptions ps "
-            "JOIN notification_prefs np ON np.user_id = ps.user_id WHERE np.daily_brief = 1"
+            f"JOIN notification_prefs np ON np.user_id = ps.user_id WHERE np.{pref} = 1"
         ).fetchall()
         return [dict(r) for r in rows]
 

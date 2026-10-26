@@ -1,5 +1,7 @@
-"""push_notify.py — Web Push notifications: the daily brief for readers who
-asked for it in their profile, and an alert on followed topics that spike.
+"""push_notify.py — Web Push notifications: the daily brief and the weekly
+review for readers who asked for them in their profile, and an alert on
+followed topics that spike. Each link carries n=<kind>, which the app counts
+as an opened notification (frontend/src/utils/notifOpen.js) and then drops.
 
 Server-side port of the "spiked" half of computeFollowDeltas
 (frontend/src/App.jsx:2403-2432): same threshold (today's count is at least
@@ -82,6 +84,7 @@ MONTHS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet",
 BRIEF_BODY_CHARS = 180
 
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s")
+_HEADING_RE = re.compile(r"#+ .*|\*\*[^*\n]+\*\*")
 
 
 def _vapid() -> tuple[str, str] | None:
@@ -123,8 +126,10 @@ def brief_title(day) -> str:
 
 
 def brief_body(text: str) -> str:
-    """The brief's opening sentence, without its markdown, cut on a word if too long."""
-    first = (text or "").strip().split("\n\n", 1)[0]
+    """The brief's opening sentence, without its markdown, cut on a word if too long.
+    A heading standing alone above the first paragraph is skipped."""
+    paragraphs = [p for p in (text or "").strip().split("\n\n") if p.strip()] or [""]
+    first = next((p for p in paragraphs if not _HEADING_RE.fullmatch(p.strip())), paragraphs[0])
     first = re.sub(r"[*_#>`]+", "", first).strip()
     first = _SENTENCE_END_RE.split(first, 1)[0]
     if len(first) <= BRIEF_BODY_CHARS:
@@ -132,19 +137,24 @@ def brief_body(text: str) -> str:
     return first[:BRIEF_BODY_CHARS].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
-def send_daily_brief(report_id: int, text: str) -> None:
-    """Called once the evening brief is archived: one notification per device of
-    each reader who turned it on, opening that brief in the Éditions."""
+def send_edition(kind: str, report_id: int, text: str) -> None:
+    """Called once an edition is archived (kind "daily" or "weekly"): one
+    notification per device of each reader who turned it on, opening that
+    edition in the Éditions."""
     vapid = _vapid()
     if not vapid:
         return
+    pref, mark, title = (
+        ("daily_brief", "jour", brief_title(api.gabon_today())) if kind == "daily"
+        else ("weekly_review", "semaine", "La revue de la semaine")
+    )
     payload = json.dumps({
-        "title": brief_title(api.gabon_today()),
+        "title": title,
         "body": brief_body(text),
-        "url": f"/#/editions/archive?id={report_id}",
+        "url": f"/#/editions/archive?id={report_id}&n={mark}",
     })
-    sent, pruned = _send(auth.list_daily_brief_subscriptions(), payload, vapid)
-    log.info("daily brief: %d notifications sent, %d stale subscriptions pruned.", sent, pruned)
+    sent, pruned = _send(auth.list_subscriptions_for(pref), payload, vapid)
+    log.info("%s: %d notifications sent, %d stale subscriptions pruned.", pref, sent, pruned)
 
 
 def send_spike_notifications() -> None:
@@ -173,7 +183,7 @@ def send_spike_notifications() -> None:
             f"{spiked[0]['since_count']} articles aujourd'hui, contre "
             f"{spiked[0]['baseline_count']} en moyenne récemment."
         )
-        payload = json.dumps({"title": title, "body": body, "url": "/"})
+        payload = json.dumps({"title": title, "body": body, "url": "/#/?n=sujets"})
         s, p = _send(entry["subscriptions"], payload, vapid)
         sent, pruned = sent + s, pruned + p
 

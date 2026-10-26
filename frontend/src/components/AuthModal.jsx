@@ -63,6 +63,12 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
+// The editions a reader can be notified of (push_notify.send_edition)
+const EDITION_PREFS = [
+  ['daily_brief', 'Le résumé du jour', "Chaque soir à 20h30, l'essentiel de l'actualité gabonaise de la journée."],
+  ['weekly_review', 'La revue de la semaine', 'Chaque vendredi à 18h, les grands sujets des sept derniers jours.'],
+];
+
 export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount, onProviderInApp }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -89,9 +95,9 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
   const [pushBusy, setPushBusy] = useState(false);
   const [pushErr, setPushErr] = useState('');
   const [vapidKey, setVapidKey] = useState('');
-  // The evening brief is a per-reader choice kept on the server (all their devices);
-  // null while loading
-  const [dailyBrief, setDailyBrief] = useState(null);
+  // Which editions to be notified of: a per-reader choice kept on the server (all
+  // their devices); null while loading
+  const [prefs, setPrefs] = useState(null);
   // On an iPhone, Safari offers notifications only to the app added to the home screen
   const iosBrowser = typeof window !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent)
     && !window.navigator.standalone;
@@ -133,9 +139,9 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
   useEffect(() => {
     if (mode !== 'profile' || !authToken) return;
     fetch(`${API_URL}/push/preferences`, { headers: { Authorization: `Bearer ${authToken}` } })
-      .then(r => (r.ok ? r.json() : { daily_brief: false }))
-      .then(d => setDailyBrief(!!d.daily_brief))
-      .catch(() => setDailyBrief(false));
+      .then(r => (r.ok ? r.json() : {}))
+      .then(d => setPrefs({ daily_brief: !!d.daily_brief, weekly_review: !!d.weekly_review }))
+      .catch(() => setPrefs({ daily_brief: false, weekly_review: false }));
   }, [mode, authToken]);
 
   // Ask the browser for permission and register this device with the server
@@ -179,26 +185,26 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
     }
   }, [authToken, subscribeDevice]);
 
-  // Turning the brief on from a device that does not receive notifications yet
+  // Turning an edition on from a device that does not receive notifications yet
   // registers it at once: otherwise the choice would reach no screen
-  const toggleDailyBrief = useCallback(async () => {
-    const on = !dailyBrief;
+  const togglePref = useCallback(async (pref) => {
+    const on = !prefs[pref];
     setPushBusy(true); setPushErr('');
     try {
       if (on && !pushEnabled) await subscribeDevice();
       const res = await fetch(`${API_URL}/push/preferences`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ daily_brief: on }),
+        body: JSON.stringify({ [pref]: on }),
       });
       if (!res.ok) throw new Error("Échec de l'enregistrement du réglage.");
-      setDailyBrief(on);
+      setPrefs(await res.json());
     } catch (e) {
       setPushErr(e.message || 'Erreur notifications.');
     } finally {
       setPushBusy(false);
     }
-  }, [authToken, dailyBrief, pushEnabled, subscribeDevice]);
+  }, [authToken, prefs, pushEnabled, subscribeDevice]);
 
   const unfollow = useCallback((type, value) => {
     setFollows(prev => prev.filter(f => !(f.type === type && f.value === value)));
@@ -386,18 +392,20 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
             <div className="auth-follows">
               <label className="auth-label">Notifications</label>
               {pushSupported ? (<>
-                <label className="auth-check">
-                  <input
-                    type="checkbox"
-                    checked={!!dailyBrief}
-                    onChange={toggleDailyBrief}
-                    disabled={pushBusy || dailyBrief === null}
-                  />
-                  <span>
-                    Le résumé du jour
-                    <small>Chaque soir à 20h30, l'essentiel de l'actualité gabonaise de la journée.</small>
-                  </span>
-                </label>
+                {EDITION_PREFS.map(([pref, label, when]) => (
+                  <label key={pref} className="auth-check">
+                    <input
+                      type="checkbox"
+                      checked={!!prefs?.[pref]}
+                      onChange={() => togglePref(pref)}
+                      disabled={pushBusy || prefs === null}
+                    />
+                    <span>
+                      {label}
+                      <small>{when}</small>
+                    </span>
+                  </label>
+                ))}
                 <p className="chat-empty-sub">
                   {pushEnabled
                     ? "Cet appareil reçoit vos notifications, ainsi qu'une alerte quand un sujet suivi connaît un pic d'actualité."

@@ -787,7 +787,9 @@ class PushSubscribeRequest(BaseModel):
 
 
 class NotificationPrefsRequest(BaseModel):
-    daily_brief: bool
+    # Only the settings sent change
+    daily_brief: bool | None = None
+    weekly_review: bool | None = None
 
 
 def _bearer_token(authorization: str | None = Header(default=None)) -> str | None:
@@ -1090,7 +1092,8 @@ def push_preferences(user: dict = Depends(require_user)):
 
 @app.put("/push/preferences")
 def put_push_preferences(req: NotificationPrefsRequest, user: dict = Depends(require_user)):
-    auth.set_daily_brief(user["id"], req.daily_brief)
+    for pref, on in req.model_dump(exclude_none=True).items():
+        auth.set_notification_pref(user["id"], pref, on)
     return auth.get_notification_prefs(user["id"])
 
 
