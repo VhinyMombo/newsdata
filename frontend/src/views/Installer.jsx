@@ -107,7 +107,7 @@ export default function Installer() {
         <img className="k-install-icon" src="/icons/icon-512.png" alt="" width="88" height="88" />
         <h1>Le Kiosque</h1>
         <div className="k-install-rule" />
-        <p className="k-install-dek">La presse et les lois, à portée de question : plus de 26{'\u202f'}000 articles de 13 journaux mis à jour toutes les heures, et les codes de loi du Journal officiel.</p>
+        <p className="k-install-dek">La presse et les lois, à portée de question : des milliers d'articles de la presse gabonaise, mis à jour toutes les heures, et les codes de loi du Journal officiel.</p>
 
         {installed ? (
           <div className="k-install-done">
