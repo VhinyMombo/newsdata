@@ -705,7 +705,11 @@ def _latest_article_date() -> str | None:
     if now - _last_date_cache["ts"] < LAST_DATE_TTL:
         return _last_date_cache["value"]
     try:
-        metas = _collection.get(include=["metadatas"])["metadatas"] or []
+        # In pages: a get() of the whole collection fails past SQLite's
+        # 32,766-variable limit (33k chunks since 26/10).
+        metas = []
+        for offset in range(0, _collection.count(), 5000):
+            metas += _collection.get(include=["metadatas"], limit=5000, offset=offset)["metadatas"] or []
         latest = max((m.get("published_time", "") for m in metas if m), default="")
         _last_date_cache["value"] = latest[:10] or None
         _last_date_cache["ts"] = now

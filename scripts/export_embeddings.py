@@ -194,7 +194,14 @@ def main() -> None:
     client = chromadb.PersistentClient(path=str(PERSIST_DIR))
     collection = client.get_collection(name=COLLECTION_NAME)
     
-    data = collection.get(include=["embeddings", "metadatas", "documents"])
+    # Read in pages: one get() of the whole collection binds one SQL variable
+    # per row and fails past SQLite's limit (32,766), reached at 33k chunks.
+    data = {"ids": [], "embeddings": [], "metadatas": [], "documents": []}
+    for offset in range(0, collection.count(), 5000):
+        page = collection.get(include=["embeddings", "metadatas", "documents"],
+                              limit=5000, offset=offset)
+        for k in data:
+            data[k].extend(page[k])
 
     # Long articles are indexed as several chunks ("<id>#N"); keep only the
     # primary chunk so the map shows one point per article.
