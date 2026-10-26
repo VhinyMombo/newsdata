@@ -263,10 +263,13 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-briefing:hover .k-briefing-cta svg { transform: translateX(3px); }
 .k-briefing .k-badge { justify-self: start; }
 .k-wire { list-style: none; margin-top: 12px; }
-.k-wire a { display: grid; grid-template-columns: 48px 1fr; gap: 10px; padding: 12px 0; border-top: 1px solid var(--rule); text-decoration: none; font-size: 0.92rem; line-height: 1.45; }
-.k-wire a:hover > span { color: var(--green); }
+.k-wire li { padding: 12px 0 8px; border-top: 1px solid var(--rule); }
+.k-wire-ask { display: grid; grid-template-columns: 48px 1fr; gap: 10px; text-decoration: none; font-size: 0.92rem; line-height: 1.45; }
+.k-wire-ask:hover > span { color: var(--green); }
+.k-wire-meta { display: flex; align-items: center; padding-left: 58px; margin-top: 1px; }
+.k-wire .k-src { font-size: 0.74rem; font-weight: 500; color: var(--muted); }
+.k-wire .k-story-read { font-size: 0.74rem; padding: 4px 0 4px 8px; }
 .k-wire time { font-size: 0.78rem; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; padding-top: 1px; }
-.k-wire .k-src { display: block; margin-top: 3px; font-size: 0.74rem; font-weight: 500; color: var(--muted); }
 
 .k-band { background: var(--bg-alt); border-top: 1px solid var(--rule); padding-block: clamp(48px, 7vw, 88px); }
 .k-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }

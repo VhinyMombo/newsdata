@@ -189,10 +189,19 @@ export default function Une({ ask, session, corpus, health, reports }) {
                   <ol className="k-wire">
                     {today.latest.slice(0, 8).map(a => (
                       <li key={a.url}>
-                        <a href="#/assistant" onClick={explain(ask, a)}>
+                        <a className="k-wire-ask" href="#/assistant" onClick={explain(ask, a)}>
                           <time>{clock(a.time) || '—'}</time>
-                          <span>{a.title}<span className="k-src">{sourceLabel(a.source)}</span></span>
+                          <span>{a.title}</span>
                         </a>
+                        {/* As on the cards: the title opens the assistant, "Lire l'article" the newspaper's site */}
+                        <p className="k-wire-meta">
+                          <span className="k-src">{sourceLabel(a.source)}</span>
+                          {a.url && (
+                            <a className="k-story-read" href={a.url} target="_blank" rel="noopener" aria-label={`Lire l'article sur le site de ${sourceLabel(a.source)}`}>
+                              Lire l'article<ArrowUpRight size={12} aria-hidden="true" />
+                            </a>
+                          )}
+                        </p>
                       </li>
                     ))}
                   </ol>
