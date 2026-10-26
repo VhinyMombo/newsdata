@@ -4,6 +4,7 @@ export const SOURCE_LABELS = {
   depeches241: 'Dépêches 241', '7joursinfo': '7 Jours Info', ethiquemediagabon: 'Éthique Média',
   focusgroupemedia: 'Focus Groupe Média', gabonallsport: 'Gabon All Sport', gabonquotidien: 'Gabon Quotidien',
   directinfosgabon: 'Direct Infos Gabon', insidenews241: 'Inside News 241', kongossanews: 'Kongossa News',
+  agpgabon: 'AGP Gabon', gabonclic: 'Gabonclic', gabonmailinfos: 'Gabon Mail Infos',
 };
 export const sourceLabel = (s) => SOURCE_LABELS[s] || s;
 
