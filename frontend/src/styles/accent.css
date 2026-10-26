@@ -34,7 +34,7 @@
 .k-move-badge { color: var(--pop-ink); background: var(--pop-soft); }
 .k-move-card.lead .k-move-badge { color: var(--deep); background: var(--pop-on-deep); }
 .k-move-card { border-top: 3px solid var(--pop); }
-.k-spark rect.now, .k-move-dots i.on { fill: var(--pop); background: var(--pop); }
+.k-spark rect.now { fill: var(--pop); background: var(--pop); }
 .k-src-n { background: var(--pop-soft); color: var(--pop-ink); }
 .k-tendances .stat-highlight .stat-label { color: var(--pop-on-deep); }
 

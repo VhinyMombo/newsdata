@@ -505,9 +505,6 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-move-wide button:hover { background: var(--bg-alt); }
 .k-move-wide strong { font-family: var(--serif); font-weight: 400; font-size: 19px; }
 .k-move-wide .k-muted { font-size: 12px; grid-column: 1 / -1; }
-.k-move-dots { display: inline-flex; gap: 3px; align-items: center; }
-.k-move-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--rule); }
-.k-move-dots i.on { background: var(--green); }
 .k-move-details { border-top: 1px solid var(--rule); padding-top: 24px; }
 .k-move-details > .k-btn svg { transition: transform .2s; }
 .k-move-details > .k-btn svg.flip { transform: rotate(180deg); }

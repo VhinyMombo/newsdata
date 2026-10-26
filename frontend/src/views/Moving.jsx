@@ -123,17 +123,17 @@ export default function Moving({ data, ask, children, period = 'week', session }
     <div className="k-moving">
       {span === 'week' ? (
         <p className="k-move-week">
-          Semaine du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux
+          Semaine du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b>
           {vsUsual !== null && Math.abs(vsUsual) >= 5 && <>, {vsUsual > 0 ? `${fr(vsUsual)} % de plus` : `${fr(-vsUsual)} % de moins`} qu'une semaine ordinaire</>}.
           {' '}Comparé aux huit semaines précédentes.
         </p>
       ) : span === 'day' ? (
         <p className="k-move-week">
-          {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux. Comparé aux quatre semaines précédentes.
+          {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b>. Comparé aux quatre semaines précédentes.
         </p>
       ) : (
         <p className="k-move-week">
-          Du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b> de {m.sources} journaux.
+          Du {shortDate(m.start)} au {shortDate(m.end)} : <b>{plural(m.week, 'article')}</b>.
           {' '}La journée du {shortDate(m.end)} est encore en cours de collecte : la veille est comptée avec elle.
         </p>
       )}
@@ -171,10 +171,7 @@ export default function Moving({ data, ask, children, period = 'week', session }
               <li key={t.label}>
                 <button onClick={() => ask(`Que disent les journaux ${w.ask} sur ${t.label} ?`)}>
                   <strong>{t.label}</strong>
-                  <span className="k-move-dots" aria-label={`${t.sources.length} journaux sur ${m.sources}`}>
-                    {Array.from({ length: m.sources }, (_, i) => <i key={i} className={i < t.sources.length ? 'on' : ''} />)}
-                  </span>
-                  <span className="k-muted">{t.sources.length} journaux, {plural(t.count, 'article')}</span>
+                  <span className="k-muted">{plural(t.count, 'article')}</span>
                 </button>
               </li>
             ))}
