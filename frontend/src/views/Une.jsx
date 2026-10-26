@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Star } from 'lucide-react';
 import { API_URL, authHeaders } from '../utils/api';
 import { clock, longDate, sourceLabel } from '../utils/format';
+import { explain } from '../utils/explain';
+import Story from '../components/Story';
 import { computeFollowDeltas } from '../utils/categories';
 
 // The catch-all buckets of normalize_category (api.py): a label that says nothing
@@ -27,39 +29,6 @@ function AskBox({ ask }) {
         {EXAMPLES.map(s => <button key={s} className="k-chip" onClick={() => ask(s)}>{s}</button>)}
       </div>
     </div>
-  );
-}
-
-// A click on an article goes to the assistant first: it explains the article
-// and its context, and cites it first with the link to the newspaper's site
-function explain(ask, a) {
-  return (e) => {
-    e.preventDefault();
-    ask(`Que dit cet article et dans quel contexte s'inscrit-il : « ${a.title.slice(0, 300)} » ?`, 'presse',
-      { url: a.url, title: a.title, source: a.source, date: (a.time || '').slice(0, 10) });
-  };
-}
-
-// An article: the whole card opens the assistant (the mark says so), and
-// "Lire l'article" opens the original on the newspaper's site
-function Story({ a, ask, size = 'm', lede = true }) {
-  const t = clock(a.time);
-  return (
-    <article className={`k-story k-story-${size}`}>
-      <a className="k-story-ask" href="#/assistant" onClick={explain(ask, a)}>
-        <h3>{a.title}</h3>
-        {lede && a.lede && <p className="k-lede">{a.lede}</p>}
-      </a>
-      <p className="k-meta">
-        <span className="k-src">{sourceLabel(a.source)}</span>{t && <> · <time>{t}</time></>}
-        {a.url && (
-          <a className="k-story-read" href={a.url} target="_blank" rel="noopener" aria-label={`Lire l'article sur le site de ${sourceLabel(a.source)}`}>
-            Lire l'article<ArrowUpRight size={13} aria-hidden="true" />
-          </a>
-        )}
-        <Sparkles size={14} aria-label="expliqué par l'assistant" />
-      </p>
-    </article>
   );
 }
 
@@ -195,7 +164,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                         </a>
                         {/* As on the cards: the title opens the assistant, "Lire l'article" the newspaper's site */}
                         <p className="k-wire-meta">
-                          <span className="k-src">{sourceLabel(a.source)}</span>
+                          <a className="k-src" href={`#/journal/${a.source}`}>{sourceLabel(a.source)}</a>
                           {a.url && (
                             <a className="k-story-read" href={a.url} target="_blank" rel="noopener" aria-label={`Lire l'article sur le site de ${sourceLabel(a.source)}`}>
                               Lire l'article<ArrowUpRight size={12} aria-hidden="true" />
@@ -205,6 +174,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                       </li>
                     ))}
                   </ol>
+                  <a className="k-textlink" href="#/journaux">Tous les journaux <ArrowRight size={14} /></a>
                 </section>
               </aside>
             </div>

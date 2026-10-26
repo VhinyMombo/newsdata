@@ -6,6 +6,7 @@ import Une from './views/Une';
 import Assistant from './views/Assistant';
 import Editions from './views/Editions';
 import Codes from './views/Codes';
+import Journaux from './views/Journaux';
 import { go, useRoute } from './hooks/useRoute';
 import { useSession } from './hooks/useSession';
 import { useHealth } from './hooks/useHealth';
@@ -66,7 +67,9 @@ export default function App() {
     else if (error === 'fournisseur') showAuthError("Le service de connexion n'a pas répondu. Réessayez dans un instant.");
   }, [route, exchange, showAuthError]);
 
-  const view = ['une', 'assistant', 'editions', 'tendances', 'codes'].includes(route.view) ? route.view : 'une';
+  // #/journal/<source> is a page of the Journaux section
+  const view = route.view === 'journal' ? 'journaux'
+    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux'].includes(route.view) ? route.view : 'une';
 
   return (
     <div className={`k-app view-${view}`}>
@@ -103,6 +106,7 @@ export default function App() {
           </Suspense>
         )}
         {view === 'codes' && <Codes codes={codes} ask={ask} />}
+        {view === 'journaux' && <Journaux sub={route.view === 'journal' ? route.sub : null} ask={ask} />}
       </main>
     </div>
   );

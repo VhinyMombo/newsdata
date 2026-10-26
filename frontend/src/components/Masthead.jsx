@@ -6,6 +6,8 @@ const SECTIONS = [
   { id: 'editions', label: 'Éditions', short: 'Éditions', Icon: FileText },
   { id: 'tendances', label: 'Tendances', short: 'Tendances', Icon: BarChart3 },
   { id: 'codes', label: 'Codes de loi', short: 'Lois', Icon: Scale },
+  // Not in the phone tab bar, already full: reached there from the newspaper names
+  { id: 'journaux', label: 'Journaux', wide: true },
 ];
 const href = (id) => `#/${id === 'une' ? '' : id}`;
 
@@ -62,7 +64,7 @@ export default function Masthead({ view, health, session }) {
         </div>
       )}
       <nav className="k-tabbar" aria-label="Rubriques">
-        {SECTIONS.map(s => {
+        {SECTIONS.filter(s => !s.wide).map(s => {
           const Icon = s.Icon;
           return (
             <a key={s.id} href={href(s.id)} aria-current={view === s.id ? 'page' : undefined}>

@@ -1224,6 +1224,31 @@ def today(per_theme: int = 6):
     }
 
 
+@app.get("/journal/{source}")
+def journal(source: str, days: int = 30, limit: int = 40):
+    """A newspaper's page: its latest articles in the Kiosque, newest first, each with a lede."""
+    start = gabon_now() - timedelta(days=min(max(days, 1), 90))
+    res = _collection.get(
+        where={"$and": [{"source": source}, {"published_ts": {"$gte": gabon_timestamp(start)}}]},
+        include=["documents", "metadatas"],
+    )
+    items, seen = [], set()
+    for doc, m in zip(res["documents"], res["metadatas"]):
+        if not m or m.get("chunk", 0) or m["source_url"] in seen:
+            continue
+        seen.add(m["source_url"])
+        items.append({
+            "title": m.get("title", ""),
+            "source": source,
+            "theme": normalize_category(m.get("category"), source),
+            "url": m["source_url"],
+            "time": str(m.get("published_time", "")),
+            "lede": _lede(doc or ""),
+        })
+    items.sort(key=lambda a: a["time"], reverse=True)
+    return {"source": source, "gabon_today": gabon_today().isoformat(), "articles": items[:min(max(limit, 1), 100)]}
+
+
 def _code_title(meta: dict) -> str:
     label = CODE_LABELS.get(meta.get("code", ""), meta.get("code", ""))
     numero = meta.get("numero") or meta.get("type", "")
