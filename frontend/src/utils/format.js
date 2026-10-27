@@ -5,7 +5,7 @@ export const SOURCE_LABELS = {
   focusgroupemedia: 'Focus Groupe Média', gabonallsport: 'Gabon All Sport', gabonquotidien: 'Gabon Quotidien',
   directinfosgabon: 'Direct Infos Gabon', insidenews241: 'Inside News 241', kongossanews: 'Kongossa News',
   agpgabon: 'AGP Gabon', gabonclic: 'Gabonclic', gabonmailinfos: 'Gabon Mail Infos',
-  medias241: 'Médias241',
+  medias241: 'Médias241', gabonmatin: 'Gabon Matin',
 };
 export const sourceLabel = (s) => SOURCE_LABELS[s] || s;
 // Each newspaper's own site, linked from its page (#/journal/<source>)
@@ -16,6 +16,7 @@ export const SOURCE_SITES = {
   gabonallsport: 'https://gabonallsport.com', gabonquotidien: 'https://gabon-quotidien.com', directinfosgabon: 'https://directinfosgabon.com',
   insidenews241: 'https://insidenews241.com', kongossanews: 'https://kongossanews.info', agpgabon: 'https://agpgabon.ga',
   gabonclic: 'https://gabonclic.info', gabonmailinfos: 'https://gabonmailinfos.com', medias241: 'https://medias241.ga',
+  gabonmatin: 'https://gabonmatin.com',
 };
 export const siteName = (s) => (SOURCE_SITES[s] || '').replace(/^https?:\/\/(www\.)?/, '');
 
