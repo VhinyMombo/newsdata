@@ -230,11 +230,14 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-story-ask::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
 .k-story-ask:focus-visible { outline: none; }
 .k-story:has(.k-story-ask:focus-visible) { outline: 2px solid var(--green); outline-offset: 2px; }
-.k-story-read { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 6px 0 6px 8px; font-weight: 600; color: var(--ink-soft); text-decoration: none; white-space: nowrap; }
+.k-story-read { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 3px; padding: 6px 0 6px 8px; font-weight: 600; color: var(--ink-soft); text-decoration: none; white-space: nowrap; }
 .k-story-read:hover { color: var(--green); text-decoration: underline; }
 .k-story h3 { transition: color 0.2s; }
 .k-story:hover h3 { color: var(--green); }
-.k-meta .k-story-read + svg { margin-left: 10px; }
+.k-story-explain { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; padding: 4px 10px; border: 1px solid var(--rule-strong); border-radius: 999px; font-weight: 600; color: var(--green); text-decoration: none; white-space: nowrap; transition: border-color 0.2s, background-color 0.2s; }
+.k-story-explain:hover { border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, transparent); }
+.k-story-explain:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.k-story-actions { display: inline-flex; align-items: center; margin-left: auto; }
 .k-story-xl h3 { font-size: clamp(2rem, 3.8vw, 3rem); line-height: 1.08; letter-spacing: -0.01em; }
 .k-story-xl .k-lede { font-size: 1.1rem; max-width: 60ch; }
 .k-story-m h3 { font-size: 1.4rem; line-height: 1.2; }
@@ -268,7 +271,7 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-wire-ask:hover > span { color: var(--green); }
 .k-wire-meta { display: flex; align-items: center; padding-left: 58px; margin-top: 1px; }
 .k-wire .k-src { font-size: 0.74rem; font-weight: 500; color: var(--muted); }
-.k-wire .k-story-read { font-size: 0.74rem; padding: 4px 0 4px 8px; }
+.k-wire .k-story-read { margin-left: auto; font-size: 0.74rem; padding: 4px 0 4px 8px; }
 .k-wire time { font-size: 0.78rem; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; padding-top: 1px; }
 /* The newspaper's name opens its page (#/journal/<source>), above the card's own link */
 a.k-src { position: relative; z-index: 1; text-decoration: none; padding-block: 4px; }
