@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect } from 'react';
 import Masthead from './components/Masthead';
 import AuthModal from './components/AuthModal';
 import InstallBanner from './components/InstallBanner';
+import PullToRefresh from './components/PullToRefresh';
 import Une from './views/Une';
 import Assistant from './views/Assistant';
 import Editions from './views/Editions';
@@ -74,6 +75,7 @@ export default function App() {
   return (
     <div className={`k-app view-${view}`}>
       <Masthead view={view} health={health} session={session} />
+      <PullToRefresh disabled={view === 'assistant' || !!session.authModal} />
       {view !== 'assistant' && <InstallBanner />}
 
       {session.authModal && (
