@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Star } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
 import { API_URL, authHeaders } from '../utils/api';
 import { clock, longDate, sourceLabel } from '../utils/format';
 import { explain } from '../utils/explain';
@@ -162,14 +162,19 @@ export default function Une({ ask, session, corpus, health, reports }) {
                           <time>{clock(a.time) || '—'}</time>
                           <span>{a.title}</span>
                         </a>
-                        {/* As on the cards: the title opens the assistant, "Lire l'article" the newspaper's site */}
+                        {/* As on the cards: the title and "Expliquer" open the assistant, "Lire l'article" the newspaper's site */}
                         <p className="k-wire-meta">
                           <a className="k-src" href={`#/journal/${a.source}`}>{sourceLabel(a.source)}</a>
-                          {a.url && (
-                            <a className="k-story-read" href={a.url} target="_blank" rel="noopener" aria-label={`Lire l'article sur le site de ${sourceLabel(a.source)}`}>
-                              Lire l'article<ArrowUpRight size={12} aria-hidden="true" />
+                          <span className="k-story-actions">
+                            {a.url && (
+                              <a className="k-story-read" href={a.url} target="_blank" rel="noopener" aria-label={`Lire l'article sur le site de ${sourceLabel(a.source)}`}>
+                                Lire l'article<ArrowUpRight size={12} aria-hidden="true" />
+                              </a>
+                            )}
+                            <a className="k-story-explain" href="#/assistant" onClick={explain(ask, a)} aria-label={`Expliquer l'article avec l'assistant : ${a.title}`}>
+                              <Sparkles size={12} aria-hidden="true" />Expliquer
                             </a>
-                          )}
+                          </span>
                         </p>
                       </li>
                     ))}

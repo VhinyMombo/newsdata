@@ -271,7 +271,9 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-wire-ask:hover > span { color: var(--green); }
 .k-wire-meta { display: flex; align-items: center; padding-left: 58px; margin-top: 1px; }
 .k-wire .k-src { font-size: 0.74rem; font-weight: 500; color: var(--muted); }
-.k-wire .k-story-read { margin-left: auto; font-size: 0.74rem; padding: 4px 0 4px 8px; }
+.k-wire .k-story-read { font-size: 0.74rem; padding: 4px 0 4px 8px; }
+.k-wire .k-story-explain { font-size: 0.74rem; padding: 2px 8px; margin-left: 10px; }
+.k-wire-meta { flex-wrap: wrap; }
 .k-wire time { font-size: 0.78rem; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; padding-top: 1px; }
 /* The newspaper's name opens its page (#/journal/<source>), above the card's own link */
 a.k-src { position: relative; z-index: 1; text-decoration: none; padding-block: 4px; }
