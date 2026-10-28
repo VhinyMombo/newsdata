@@ -11,7 +11,8 @@ Usage:
   python scripts/create_codes_search_db.py
   python scripts/create_codes_search_db.py --persist-dir codes_chroma_db --embed-model snowflake-arctic-embed2
 
-Run it again whenever the codes collection is rebuilt, then restart the API.
+Run it again whenever the codes collection is rebuilt, then restart the API
+(the live collection is replaced only at the end, so search keeps working meanwhile).
 """
 from __future__ import annotations
 
@@ -48,12 +49,15 @@ def main() -> None:
     kinds = {k: sum(m["kind"] == k for m in metas) for k in ("article", "row", "prose")}
     print(f"{len(src['ids'])} articles -> {len(ids)} search documents {kinds}")
 
-    if args.collection in [c.name for c in client.list_collections()]:
-        client.delete_collection(args.collection)
+    # Built under a temporary name and swapped in at the end: deleting the live
+    # collection first left the API's law search failing for the whole rebuild
+    building = args.collection + "_building"
+    if building in [c.name for c in client.list_collections()]:
+        client.delete_collection(building)
     # Chroma's default search breadth lost two right answers out of 45 on the
     # benchmark once the collection grew to 5,600 short documents
     col = client.create_collection(
-        args.collection,
+        building,
         metadata={"hnsw:search_ef": 200, "hnsw:construction_ef": 200,
                   "embed_model": args.embed_model},
     )
@@ -66,6 +70,9 @@ def main() -> None:
         col.add(ids=ids[sl], documents=texts[sl], metadatas=metas[sl],
                 embeddings=embedder.embed_documents(texts[sl]))
         print(f"  ... {min(i + BATCH, len(ids))}/{len(ids)} embedded")
+    if args.collection in [c.name for c in client.list_collections()]:
+        client.delete_collection(args.collection)
+    col.modify(name=args.collection)
     print(f"Saved {col.count()} documents to {args.collection} in {args.persist_dir.resolve()} "
           f"({args.embed_model})")
 
