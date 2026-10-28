@@ -15,6 +15,7 @@ import logging
 import math
 import os
 import re
+import threading
 import time
 import unicodedata
 import urllib.parse
@@ -24,6 +25,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import chromadb
+from chromadb.api.client import SharedSystemClient
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -163,6 +165,64 @@ _embedder   = OllamaEmbeddings(model=EMBED_MODEL)
 CHAT_MODEL = llm.MODEL
 _llm = llm.chat_model(temperature=0.2, num_ctx=CHAT_NUM_CTX)
 logger.info(f"✅ {_collection.count()} articles ready  |  LLM: {llm.PROVIDER}/{CHAT_MODEL}")
+
+# New articles without a restart. The collection runs in another container and
+# writes to the same files, but this process keeps the search index in memory and
+# would not find the new articles; a freshly opened client does. When a collection
+# is done, the schedule touches RELOAD_MARK: a watcher opens a fresh client next to
+# the current one and swaps it in. Requests already running finish on the old one,
+# closed two minutes later. Chroma caches one client per path, so the two clients
+# use two spellings of the same directory.
+RELOAD_MARK = PERSIST_DIR / ".updated"
+_SPELLINGS = (str(PERSIST_DIR), str(PERSIST_DIR) + "/.")
+_spelling = 0
+
+
+def _reload_index() -> None:
+    global _client, _collection, _spelling
+    systems = SharedSystemClient._identifier_to_system
+    old_id, new_id = _SPELLINGS[_spelling], _SPELLINGS[1 - _spelling]
+    stale = systems.pop(new_id, None)  # the client before last, if still open
+    if stale is not None:
+        stale.stop()
+    client = chromadb.PersistentClient(path=new_id)
+    collection = client.get_collection(COLLECTION_NAME)
+    count = collection.count()
+    old_system = systems.get(old_id)
+    _client, _collection, _spelling = client, collection, 1 - _spelling
+    _last_date_cache["ts"] = _article_count_cache["ts"] = 0.0
+    logger.info(f"🔄 Index reloaded: {count} articles")
+
+    def close_old():
+        if old_system is not None and systems.get(old_id) is old_system:
+            systems.pop(old_id)
+            old_system.stop()
+    timer = threading.Timer(120, close_old)
+    timer.daemon = True  # scripts that import api must still exit at once
+    timer.start()
+
+
+def _watch_index() -> None:
+    try:
+        seen = RELOAD_MARK.stat().st_mtime
+    except FileNotFoundError:
+        seen = 0.0
+    while True:
+        time.sleep(20)
+        try:
+            mtime = RELOAD_MARK.stat().st_mtime
+        except FileNotFoundError:
+            continue
+        if mtime == seen:
+            continue
+        seen = mtime
+        try:
+            _reload_index()
+        except Exception as e:
+            logger.error(f"Index reload failed, keeping the current one: {e}")
+
+
+threading.Thread(target=_watch_index, daemon=True, name="index-reload").start()
 
 # Legal codes corpus (optional second collection — same embedding model)
 try:
