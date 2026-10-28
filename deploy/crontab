@@ -1,6 +1,7 @@
 # Le Kiosque — server schedule (install with: crontab deploy/crontab).
 # Times are the server's local time: set it to Africa/Libreville first.
-# A collection every hour from 7:00 to 21:00 that adds the new articles to the
+# A collection every hour from 6:00 to 21:00, and one at 23:00 so the evening's
+# articles do not wait for the morning, that adds the new articles to the
 # existing map (MAP=append: a few minutes, no naming calls), and a full redraw of
 # the map with its themes named by Gemini at 8:20, 13:20 and 19:20. The daily
 # brief at 20:30, the weekly review on Friday at 18:00, the backup at 3:30
@@ -12,7 +13,7 @@
 KIOSQUE=/home/ubuntu/lekiosque
 DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --profile ollama"
 
-0 7-21 * * * cd $KIOSQUE && flock -n /tmp/lekiosque-pipeline.lock $DC run --rm -e MAP=append pipeline 1 >> logs/pipeline_scheduled.log 2>&1 && $DC restart api >> logs/pipeline_scheduled.log 2>&1
+0 6-21,23 * * * cd $KIOSQUE && flock -n /tmp/lekiosque-pipeline.lock $DC run --rm -e MAP=append pipeline 1 >> logs/pipeline_scheduled.log 2>&1 && $DC restart api >> logs/pipeline_scheduled.log 2>&1
 20 8,13,19 * * * cd $KIOSQUE && flock -w 1800 /tmp/lekiosque-pipeline.lock $DC run --rm --entrypoint python pipeline scripts/export_embeddings.py >> logs/map.log 2>&1
 30 20 * * * cd $KIOSQUE && $DC run --rm --entrypoint python pipeline scripts/generate_scheduled_report.py >> logs/scheduled_report.log 2>&1
 0 18 * * 5 cd $KIOSQUE && $DC run --rm --entrypoint python pipeline scripts/generate_scheduled_report.py --weekly >> logs/scheduled_report.log 2>&1
