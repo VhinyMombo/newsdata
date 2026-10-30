@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { isPhone, isStandalone, PLATFORM } from '../hooks/useInstall';
+import { go } from '../hooks/useRoute';
 import {
   DEVICE_PREFS, currentSubscription, getDevicePrefs, permission, pushSupported,
   setDevicePref, subscribeThisDevice, unsubscribeThisDevice,
@@ -45,6 +47,10 @@ export default function Notifications({ session }) {
   return (
     <div className="k-wrap k-page k-notifs">
       <header className="k-page-head">
+        {/* Reached from the bell, over whatever page was open: back to it */}
+        <button className="k-page-close" onClick={() => (window.history.length > 1 ? window.history.back() : go(''))} aria-label="Fermer les réglages de notifications">
+          <X size={20} />
+        </button>
         <span className="k-eyebrow">Notifications</span>
         <h1 className="k-title">Ce que Le Kiosque vous envoie</h1>
         <p className="k-dek">Ces notifications arrivent sur cet appareil, sans compte. Deux par jour au plus, jamais entre 22h et 7h.</p>

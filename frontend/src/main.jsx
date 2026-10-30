@@ -8,6 +8,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { resume } from './utils/resume'
 import { countNotificationOpen } from './utils/notifOpen'
 import { countNewspaperClicks } from './utils/outbound'
+import { settleAfterKeyboard } from './utils/keyboard'
 
 // Installed on a phone, the app can stay open in the background for days without
 // a full reload, so a new deploy never reached it: look for a new version each time
@@ -29,6 +30,7 @@ const restoreScroll = installer ? () => {} : resume()
 countNotificationOpen()
 window.addEventListener('hashchange', countNotificationOpen)
 countNewspaperClicks()
+settleAfterKeyboard()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

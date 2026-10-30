@@ -330,7 +330,19 @@ a.k-src:hover { text-decoration: underline; }
 .k-try-arrow { position: absolute; right: 14px; bottom: 14px; color: var(--green); transform: rotate(45deg); }
 
 .k-thread { display: grid; }
-.k-turn { padding: 32px 0; border-bottom: 1px solid var(--rule); }
+.k-turn { padding: 32px 0; border-bottom: 1px solid var(--rule); scroll-margin-top: calc(var(--nav-h) + 12px); }
+/* The conversation's questions, a jump back to each answer (Assistant.jsx QuestionsNav) */
+.k-dock-tools { position: relative; }  /* the menu spans the dock, not its button */
+.k-qnav-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 30; width: min(360px, 100%); max-height: min(50vh, 420px); overflow-y: auto; padding: 6px; background: var(--white); border: 1px solid var(--rule-strong); border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 42, 58, 0.18); }
+.k-qnav-menu button { display: flex; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: none; text-align: left; font: inherit; font-size: 0.9rem; line-height: 1.4; color: var(--ink); cursor: pointer; }
+.k-qnav-menu button:hover, .k-qnav-menu button:focus-visible { background: var(--bg-alt); }
+.k-qnav-menu button span { flex: none; min-width: 1.4em; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Narrow phones (iPhone SE): the modes not selected show their icon only, so the dock's row fits */
+@media (max-width: 380px) { .k-dock-modes button:not(.on) { font-size: 0; gap: 0; } }
+/* A settings page opened over another one closes back to it (Notifications.jsx) */
+.k-page-head:has(.k-page-close) { position: relative; padding-right: 52px; }
+.k-page-close { position: absolute; top: 0; right: 0; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--rule); border-radius: 50%; background: var(--white); color: var(--ink); cursor: pointer; }
+.k-page-close:hover { border-color: var(--rule-strong); }
 /* Room for the latest question to reach the top of the screen as soon as it is sent */
 .k-thread > .k-turn:last-child { min-height: calc(100svh - var(--nav-h) - var(--tabbar-h, 0px) - 140px); }
 .k-question { font-size: clamp(1.45rem, 2.6vw, 1.9rem); line-height: 1.22; margin-bottom: 16px; }
@@ -338,6 +350,8 @@ a.k-src:hover { text-decoration: underline; }
 .k-turn-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 14px; margin-left: -10px; }
 
 .k-dock { position: sticky; bottom: var(--tabbar-h); z-index: 20; padding: 20px 0 12px; background: var(--white); }
+/* iPhone: down to the real bottom of the screen when iOS places the bars too high (utils/keyboard.js) */
+.vv-shifted .k-dock, .vv-shifted .k-tabbar { transform: translateY(var(--vv-shift)); }
 /* The answer fades out above the dock instead of running under its pills */
 .k-dock::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 28px; background: linear-gradient(to top, var(--white), rgba(255, 255, 255, 0)); pointer-events: none; }
 /* Controls in the dock once a conversation runs: modes on the left, map and new conversation on the right */
@@ -458,7 +472,9 @@ a.k-src:hover { text-decoration: underline; }
   .k-disclaimer .long { display: none; }
   .k-disclaimer .short { display: inline; }
   /* Phone: modes keep their names, the two actions shrink to icons */
-  .k-dock-modes button, .k-icon-btn { height: 30px; padding: 0 9px; font-size: 0.76rem; }
+  .k-dock-modes button, .k-icon-btn { height: 30px; padding: 0 7px; font-size: 0.76rem; }
+  .k-dock-tools { gap: 6px; }
+  .k-dock-modes, .k-dock-actions { gap: 3px; }
   .k-icon-btn span { display: none; }
 
   .k-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset: auto 0 0 0; z-index: 60; height: var(--tabbar-h); padding-bottom: env(safe-area-inset-bottom); background: color-mix(in srgb, var(--white) 94%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-top: 1px solid var(--rule); }

@@ -500,8 +500,10 @@ Règles impératives :
 - Reproduis fidèlement le sens des dispositions ; ne reformule jamais de façon approximative.
 - N'invente aucune disposition et n'utilise aucune connaissance extérieure aux extraits fournis.
 - Si les extraits fournis ne couvrent pas la question, dis-le clairement plutôt que d'extrapoler.
+- Écris les montants en chiffres, jamais en toutes lettres même si le texte de loi le fait : d'abord une forme lisible, puis le montant exact entre parenthèses, par exemple « 2 973,76 milliards de FCFA (2 973 760 635 227 FCFA) ».
 - Tu peux comparer et calculer à partir des chiffres des extraits, même s'ils viennent de textes différents (loi de finances 2026 et projet de loi de finances 2027) : donne chaque chiffre avec son article, puis l'écart. Précise que le projet 2027 n'est pas encore adopté.
 - Si les extraits ne couvrent qu'une partie de la question, réponds sur cette partie et dis ce qui manque.
+- Une question de suite brève ou vague (« Quelle est la différence ? », « Et en 2026 ? ») se comprend à partir de l'échange précédent : fais la comparaison ou le calcul le plus naturel (par exemple l'écart entre les montants dont il était question), en disant en une phrase comment tu as compris la question, au lieu de répondre que la question est imprécise.
 - Termine par : 'Ces informations sont données à titre documentaire et ne constituent pas un conseil juridique.'
 
 Rédaction :
@@ -589,11 +591,26 @@ def _law_excerpt(text: str, question: str, limit: int, rows: list[str] = ()) -> 
     return "\n".join(out)
 
 
+# Finance laws spell each amount out before giving it in figures ("deux mille neuf
+# cent soixante-treize milliards […] (2.973.760.635.227) FCFA"): the model copied
+# the words, six lines per amount on a phone. Only the figures are kept.
+_NUM_WORD = (r"z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|"
+             r"quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?|mille|"
+             r"millions?|milliards?|et")
+_SPELLED_AMOUNT_RE = re.compile(
+    rf"\b(?:{_NUM_WORD})(?:[\s-]+(?:{_NUM_WORD}))*\s*\((\d[\d. \u00a0\u202f]*\d)\)", re.IGNORECASE)
+
+
+def _figures_only(text: str) -> str:
+    return _SPELLED_AMOUNT_RE.sub(r"\1", text)
+
+
 def build_codes_prompt(question: str, extracts: list["ContextArticle"]) -> str:
     """User-turn prompt for the legal corpus: extracts + question."""
     blocks = []
     for ext in extracts:
-        blocks.append(f"[{ext.title}]\n{_law_excerpt(ext.full_text, question, CODES_EXCERPT_CHARS, ext.rows)}")
+        excerpt = _figures_only(_law_excerpt(ext.full_text, question, CODES_EXCERPT_CHARS, ext.rows))
+        blocks.append(f"[{ext.title}]\n{excerpt}")
     context = "\n\n---------------------\n\n".join(blocks)
 
     return (
@@ -601,7 +618,10 @@ def build_codes_prompt(question: str, extracts: list["ContextArticle"]) -> str:
         "RÈGLES STRICTES :\n"
         "- Réponds uniquement à partir des extraits de codes ci-dessous.\n"
         "- Cite le numéro d'article pour chaque affirmation.\n"
-        "- Comparer ou calculer à partir des chiffres des extraits est permis.\n"
+        "- Comparer ou calculer à partir des chiffres des extraits est permis. Si la question "
+        "demande une différence, un écart, une hausse ou une comparaison, fais le calcul et "
+        "donne le résultat chiffré.\n"
+        "- Écris les montants en chiffres, jamais en toutes lettres.\n"
         "- Si les extraits ne couvrent pas la question, dis-le en une phrase.\n\n"
         f"=== EXTRAITS DES CODES ===\n{context}\n=== FIN DES EXTRAITS ===\n\n"
         f"Rappel de la question : {question}\n\n"
@@ -1499,7 +1519,12 @@ def _codes_hits(embed_text: str, n: int) -> list[tuple[str, float, str, dict]]:
     return codes_search.best_per_article(raw, n)
 
 
-def _search_codes(question: str, embed_text: str, n_results: int) -> "SearchResponse":
+# "Quelle est la différence avec la loi de finances 2026 ?" after a question on an
+# article: the comparison is about that article, though this question names none
+_COMPARE_RE = re.compile(r"diff[ée]ren|compar|par rapport|[ée]volu|[ée]cart|change|avant|l'an dernier", re.I)
+
+
+def _search_codes(question: str, embed_text: str, n_results: int, previous: str = "") -> "SearchResponse":
     if _codes_collection is None:
         raise HTTPException(
             status_code=503,
@@ -1518,6 +1543,10 @@ def _search_codes(question: str, embed_text: str, n_results: int) -> "SearchResp
     # "Que prévoit l'article 105 du projet de loi de finances 2027 ?": the article
     # named leads, whatever the embedding finds closest
     named = _named_code_articles(question)
+    # A follow-up or a comparison that names no article keeps the one asked about
+    # just before, next to what the new question finds
+    if not named and previous.strip() and (embed_text != question or _COMPARE_RE.search(question)):
+        named = _named_code_articles(previous)
     if named:
         got = _codes_collection.get(ids=named, include=["documents", "metadatas"])
         by_id = dict(zip(got["ids"], zip(got["metadatas"], got["documents"])))
@@ -1550,7 +1579,8 @@ def _search_codes(question: str, embed_text: str, n_results: int) -> "SearchResp
             distance = round(dist, 4),
             id       = id_,
         ))
-        if len(results) >= n_results:
+        # an article carried over from the previous question comes on top
+        if len(results) >= n_results + len(named):
             break
     return SearchResponse(question=question, results=results)
 
@@ -1705,7 +1735,7 @@ def search(request: Request, req: SearchRequest):
     # Legal corpus: semantic search over code articles and table rows, with its
     # own embedding model, no temporal logic
     if req.corpus == "codes":
-        return _search_codes(question, embed_text, req.n_results)
+        return _search_codes(question, embed_text, req.n_results, req.previous_question)
 
     try:
         q_vec = _embedder.embed_query(embed_text)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, GitCompare, History, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 import { API_URL } from '../utils/api';
@@ -116,6 +116,38 @@ function Turn({ entry, idx, live, chat }) {
         <Thinking interval={3500} phrases={['Recherche dans le corpus…', 'Sélection des articles pertinents…']} />
       )}
     </article>
+  );
+}
+
+// A long conversation is a long scroll: the questions asked so far, listed above
+// the dock, each one a jump back to its answer
+function QuestionsNav({ entries, threadRef }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+  if (entries.length < 2) return null;
+  const goTo = (i) => {
+    setOpen(false);
+    threadRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  return (
+    <div className="k-qnav" ref={boxRef}>
+      <button className="k-icon-btn" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label="Questions de la conversation">
+        <ListOrdered size={15} /><span>Questions</span>
+      </button>
+      {open && (
+        <div className="k-qnav-menu">
+          {entries.map((e, i) => (
+            <button key={e.id ?? i} onClick={() => goTo(i)}><span>{i + 1}</span>{e.question}</button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -336,6 +368,7 @@ export default function Assistant({ chat, compare, sub, session }) {
               </div>
               <div className="k-dock-actions">
                 {hasSources && <a className="k-icon-btn" href="#/tendances/carte" aria-label="Voir sur la carte"><MapIcon size={15} /><span>Carte</span></a>}
+                <QuestionsNav entries={chatHistory} threadRef={threadRef} />
                 <button className="k-icon-btn" onClick={newConversation} aria-label="Nouvelle conversation"><SquarePen size={15} /><span>Nouvelle</span></button>
               </div>
             </div>
