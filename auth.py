@@ -70,6 +70,32 @@ CREATE TABLE IF NOT EXISTS notification_prefs (
     weekly_review INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+-- Every device that accepted notifications, signed in or not, and the general
+-- notifications it takes (all on by default): the morning essentials, a story
+-- the whole press picks up, and announcements sent from #/diffusion. The
+-- endpoint is the device's secret address at its push service.
+CREATE TABLE IF NOT EXISTS devices (
+    endpoint   TEXT PRIMARY KEY,
+    p256dh     TEXT NOT NULL,
+    auth_key   TEXT NOT NULL,
+    morning    INTEGER NOT NULL DEFAULT 1,
+    wave       INTEGER NOT NULL DEFAULT 1,
+    alerts     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    seen_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- General notifications already sent, so a story is announced once and the
+-- daily caps hold across runs
+CREATE TABLE IF NOT EXISTS notification_log (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind    TEXT NOT NULL,
+    day     TEXT NOT NULL,
+    keys    TEXT NOT NULL DEFAULT '',
+    title   TEXT NOT NULL DEFAULT '',
+    sent    INTEGER NOT NULL DEFAULT 0,
+    sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notification_log_day ON notification_log(kind, day);
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL,
@@ -135,6 +161,7 @@ def _conn():
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(_SCHEMA)
         _migrate_notification_prefs(conn)
+        _migrate_devices(conn)
         yield conn
         conn.commit()
     finally:
@@ -293,6 +320,7 @@ def remove_push_subscription_by_endpoint(endpoint: str) -> None:
     """Used by the notify job to prune subscriptions the push service reports as gone (410)."""
     with _conn() as conn:
         conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.execute("DELETE FROM devices WHERE endpoint = ?", (endpoint,))
 
 
 def list_push_subscriptions_with_follows() -> list[dict]:
@@ -362,6 +390,103 @@ def list_subscriptions_for(pref: str) -> list[dict]:
         rows = conn.execute(
             "SELECT ps.endpoint, ps.p256dh, ps.auth_key FROM push_subscriptions ps "
             f"JOIN notification_prefs np ON np.user_id = ps.user_id WHERE np.{pref} = 1"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Devices (no account needed) ─────────────────────────────────────────────
+
+# The general notifications a device can take; also the column names, so only
+# these ever reach the SQL below
+DEVICE_PREFS = ("morning", "wave", "alerts")
+
+
+def _migrate_devices(conn: sqlite3.Connection) -> None:
+    # Once (schema version 1, 30/10/2026): devices that subscribed through an
+    # account before the devices table existed take the general notifications too
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= 1:
+        return
+    conn.execute(
+        "INSERT OR IGNORE INTO devices (endpoint, p256dh, auth_key) "
+        "SELECT endpoint, p256dh, auth_key FROM push_subscriptions"
+    )
+    conn.execute("PRAGMA user_version = 1")
+
+
+def _device_prefs(row: sqlite3.Row | None) -> dict | None:
+    return {k: bool(row[k]) for k in DEVICE_PREFS} if row else None
+
+
+def register_device(endpoint: str, p256dh: str, auth_key: str) -> dict:
+    """Add a device, or refresh its keys and last visit; its choices are kept."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO devices (endpoint, p256dh, auth_key) VALUES (?, ?, ?) "
+            "ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, "
+            "auth_key = excluded.auth_key, seen_at = datetime('now')",
+            (endpoint, p256dh, auth_key),
+        )
+        row = conn.execute(f"SELECT {', '.join(DEVICE_PREFS)} FROM devices WHERE endpoint = ?", (endpoint,)).fetchone()
+        return _device_prefs(row)
+
+
+def get_device_prefs(endpoint: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(f"SELECT {', '.join(DEVICE_PREFS)} FROM devices WHERE endpoint = ?", (endpoint,)).fetchone()
+        return _device_prefs(row)
+
+
+def set_device_pref(endpoint: str, pref: str, on: bool) -> None:
+    if pref not in DEVICE_PREFS:
+        raise AuthError("Réglage de notification inconnu.")
+    with _conn() as conn:
+        conn.execute(f"UPDATE devices SET {pref} = ? WHERE endpoint = ?", (int(on), endpoint))
+
+
+def remove_device(endpoint: str) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM devices WHERE endpoint = ?", (endpoint,))
+
+
+def list_devices_for(pref: str) -> list[dict]:
+    """Every device that takes this general notification."""
+    if pref not in DEVICE_PREFS:
+        raise AuthError("Réglage de notification inconnu.")
+    with _conn() as conn:
+        rows = conn.execute(f"SELECT endpoint, p256dh, auth_key FROM devices WHERE {pref} = 1").fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_devices() -> dict:
+    with _conn() as conn:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS total, {', '.join(f'SUM({p}) AS {p}' for p in DEVICE_PREFS)} FROM devices"
+        ).fetchone()
+        return {k: row[k] or 0 for k in ("total", *DEVICE_PREFS)}
+
+
+def list_user_subscriptions(user_id: int) -> list[dict]:
+    """The devices of one reader (an announcement's test goes to the sender alone)."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT endpoint, p256dh, auth_key FROM push_subscriptions WHERE user_id = ?", (user_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def log_notification(kind: str, day: str, keys: list[str], title: str, sent: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO notification_log (kind, day, keys, title, sent) VALUES (?, ?, ?, ?, ?)",
+            (kind, day, "\n".join(keys), title, sent),
+        )
+
+
+def notifications_sent(kind: str, since_day: str) -> list[dict]:
+    """Sends of one kind from a day on, newest first."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notification_log WHERE kind = ? AND day >= ? ORDER BY id DESC", (kind, since_day)
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -598,6 +723,9 @@ def exchange_login_code(code: str) -> tuple[dict, str]:
 def delete_user(user_id: int) -> None:
     """Erase the account and everything attached to it, at the reader's request."""
     with _conn() as conn:
+        # The reader's devices stop receiving the general notifications too
+        conn.execute("DELETE FROM devices WHERE endpoint IN "
+                     "(SELECT endpoint FROM push_subscriptions WHERE user_id = ?)", (user_id,))
         for table in ("sessions", "follows", "push_subscriptions", "notification_prefs", "password_resets",
                       "conversations", "identities", "login_codes", "app_logins"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))

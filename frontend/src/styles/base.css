@@ -617,3 +617,37 @@ body:has(.k-install) { padding-bottom: 0; background: var(--hero, var(--bg-alt))
 /* One quiet line under the home page: the privacy policy, which Google's brand check looks for */
 .k-legal { padding-top: 28px; padding-bottom: 32px; text-align: center; font-size: 0.82rem; }
 .k-legal a { color: var(--muted); }
+
+/* ── Notifications: the offer in the installed app, the settings page, the team's announcements ── */
+.k-bell { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--rule-strong); border-radius: 10px; color: var(--ink); }
+.k-bell:hover, .k-bell[aria-current="page"] { border-color: var(--ink); color: var(--green); }
+.k-notif-prompt-icon { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--green-soft); color: var(--green); }
+.k-notif-prompt a { color: var(--green); }
+.k-notif-prompt-error { color: var(--clay); }
+.k-notifs-list { list-style: none; padding: 0; margin: 0 0 24px; max-width: 640px; border-top: 1px solid var(--rule); }
+.k-notifs-list li { border-bottom: 1px solid var(--rule); }
+.k-notifs-list label { display: flex; align-items: flex-start; gap: 14px; padding: 18px 0; cursor: pointer; }
+.k-notifs-list input { flex: none; width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--green); }
+.k-notifs-list strong { display: block; font-weight: 600; color: var(--ink); }
+.k-notifs-list small { display: block; margin-top: 4px; font-size: 0.86rem; line-height: 1.45; color: var(--muted); }
+.k-notifs-note { max-width: 640px; margin-bottom: 20px; color: var(--ink-soft); line-height: 1.55; }
+.k-notifs-note a { color: var(--green); }
+.k-notifs-off { display: grid; gap: 12px; justify-items: start; }
+.k-notifs-error { margin-top: 16px; color: var(--clay); }
+.k-diffusion-form { display: grid; gap: 8px; max-width: 640px; }
+.k-diffusion-form .k-label { margin-top: 12px; }
+.k-diffusion-form textarea.k-input { resize: vertical; font: inherit; }
+.k-notif-preview { display: flex; gap: 12px; align-items: flex-start; margin-top: 16px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 16px; background: var(--bg-alt); }
+.k-notif-preview img { border-radius: 8px; flex: none; }
+.k-notif-preview strong { display: block; font-weight: 600; font-size: 0.92rem; }
+.k-notif-preview p { margin-top: 2px; font-size: 0.88rem; line-height: 1.4; color: var(--ink-soft); }
+.k-diffusion-actions, .k-diffusion-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+.k-diffusion-confirm p { flex-basis: 100%; font-weight: 500; }
+.k-diffusion-ok { margin-top: 12px; color: var(--green); }
+.k-diffusion-history { margin-top: 48px; max-width: 800px; }
+.k-diffusion-history ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.k-diffusion-history li { display: grid; grid-template-columns: 6.5em 11em 1fr auto; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 0.88rem; }
+@media (max-width: 640px) {
+  .k-diffusion-history li { grid-template-columns: 1fr auto; }
+  .k-diffusion-history li > :nth-child(2) { display: none; }
+}

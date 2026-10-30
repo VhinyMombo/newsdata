@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import re
+from datetime import timedelta
 
 from nltk.corpus import stopwords
 from pywebpush import WebPushException, webpush
@@ -190,6 +191,175 @@ def send_spike_notifications() -> None:
     log.info("push_notify: %d notifications sent, %d stale subscriptions pruned.", sent, pruned)
 
 
+# ── General notifications: every device that accepted them, no account needed ──
+
+# Display names, as in frontend/src/utils/format.js SOURCE_LABELS
+SOURCE_LABELS = {
+    "gabonreview": "Gabonreview", "gabonmediatime": "Gabon Media Time", "gabonactu": "Gabonactu",
+    "lunion": "L'Union", "depeches241": "Dépêches 241", "7joursinfo": "7 Jours Info",
+    "ethiquemediagabon": "Éthique Média", "focusgroupemedia": "Focus Groupe Média",
+    "gabonallsport": "Gabon All Sport", "gabonquotidien": "Gabon Quotidien",
+    "directinfosgabon": "Direct Infos Gabon", "insidenews241": "Inside News 241",
+    "kongossanews": "Kongossa News", "agpgabon": "AGP Gabon", "gabonclic": "Gabonclic",
+    "gabonmailinfos": "Gabon Mail Infos", "medias241": "Médias241", "gabonmatin": "Gabon Matin",
+}
+
+# Two articles from different newspapers are the same story when their stored
+# embeddings (embeddinggemma, first chunk) are at least this close. Tried on
+# 111 articles over 36 hours (22/10/2026): 0.8 groups the cement plant at
+# Akanda across 6 papers and the withdrawn gold permits across 4, without
+# merging unrelated stories; 0.85 already splits them.
+STORY_SIMILARITY = 0.8
+# A story becomes "toute la presse en parle" when this many newspapers carry it
+# within WAVE_HOURS, and is announced once; at most one such alert a day
+WAVE_MIN_SOURCES = 4
+WAVE_HOURS = 12
+MORNING_STORIES = 3
+
+
+def _stories(start) -> list[dict]:
+    """Articles published since `start`, grouped by story, the most widely
+    covered first: [{title, source, url, sources, urls}], where title/source/url
+    are those of the article closest to the story's centre."""
+    import numpy as np
+
+    res = api._collection.get(
+        where={"published_ts": {"$gte": api.gabon_timestamp(start)}},
+        include=["metadatas", "embeddings"],
+    )
+    # One entry per article: its first chunk (older articles carry no chunk field)
+    keep = [i for i, m in enumerate(res["metadatas"] or []) if m and not m.get("chunk", 0)]
+    if not keep:
+        return []
+    metas = [res["metadatas"][i] for i in keep]
+    vectors = np.asarray([res["embeddings"][i] for i in keep], dtype=float)
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    sim = vectors @ vectors.T
+
+    # Single-link grouping across newspapers (a paper's two articles on one
+    # story are not the press picking it up)
+    parent = list(range(len(metas)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(len(metas)):
+        for j in range(i + 1, len(metas)):
+            if sim[i, j] >= STORY_SIMILARITY and metas[i].get("source") != metas[j].get("source"):
+                parent[root(i)] = root(j)
+    groups: dict[int, list[int]] = {}
+    for i in range(len(metas)):
+        groups.setdefault(root(i), []).append(i)
+
+    stories = []
+    for members in groups.values():
+        centre = vectors[members].mean(axis=0)
+        lead = metas[max(members, key=lambda k: float(vectors[k] @ centre))]
+        stories.append({
+            "title": (lead.get("title") or "").strip(),
+            "source": lead.get("source", ""),
+            "url": lead.get("source_url", ""),
+            "sources": sorted({metas[k].get("source", "") for k in members}),
+            "urls": sorted({metas[k].get("source_url", "") for k in members}),
+            "latest": max(float(metas[k].get("published_ts") or 0) for k in members),
+        })
+    stories.sort(key=lambda s: (len(s["sources"]), s["latest"]), reverse=True)
+    return stories
+
+
+def _send_general(pref: str, payload: dict, vapid: tuple[str, str]) -> int:
+    sent, pruned = _send(auth.list_devices_for(pref), json.dumps(payload), vapid)
+    log.info("%s: %d notifications sent, %d stale subscriptions pruned.", pref, sent, pruned)
+    return sent
+
+
+def _short(title: str, limit: int = 72) -> str:
+    return title if len(title) <= limit else title[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def _ask_url(question: str, mark: str) -> str:
+    """Opens the assistant on this question (App.jsx reads q), counted as mark."""
+    from urllib.parse import quote
+    return f"/#/assistant?q={quote(question)}&n={mark}"
+
+
+def send_morning() -> None:
+    """L'essentiel du matin (7:30): the three most covered stories since the
+    evening before, each with its newspaper. Once a day."""
+    vapid = _vapid()
+    if not vapid:
+        return
+    today = api.gabon_today().isoformat()
+    if auth.notifications_sent("morning", today):
+        log.info("morning: already sent today.")
+        return
+    start = (api.gabon_now() - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+    stories = [s for s in _stories(start) if s["title"]][:MORNING_STORIES]
+    if not stories:
+        log.info("morning: no article since yesterday evening — nothing sent.")
+        return
+    body = "\n".join(f"• {_short(s['title'])} ({SOURCE_LABELS.get(s['source'], s['source'])})" for s in stories)
+    sent = _send_general("morning", {"title": "L'essentiel du matin", "body": body, "url": "/#/?n=matin"}, vapid)
+    auth.log_notification("morning", today, [u for s in stories for u in s["urls"]], stories[0]["title"], sent)
+
+
+def send_wave() -> None:
+    """Toute la presse en parle: a story at least WAVE_MIN_SOURCES newspapers
+    carried in the last WAVE_HOURS, announced once, one alert a day at most.
+    Opens the assistant on that story, with every newspaper's article."""
+    vapid = _vapid()
+    if not vapid:
+        return
+    now = api.gabon_now()
+    today = now.date().isoformat()
+    if auth.notifications_sent("wave", today):
+        log.info("wave: already sent today.")
+        return
+    announced = {
+        u for row in auth.notifications_sent("wave", (now.date() - timedelta(days=3)).isoformat())
+        for u in row["keys"].split("\n") if u
+    }
+    story = next(
+        (s for s in _stories(now - timedelta(hours=WAVE_HOURS))
+         if len(s["sources"]) >= WAVE_MIN_SOURCES and s["title"] and not announced.intersection(s["urls"])),
+        None,
+    )
+    if not story:
+        log.info("wave: no story carried by %d newspapers — nothing sent.", WAVE_MIN_SOURCES)
+        return
+    payload = {
+        "title": "Toute la presse en parle",
+        "body": f"{_short(story['title'], 110)} — repris par {len(story['sources'])} journaux en quelques heures.",
+        "url": _ask_url(f"Que dit la presse sur « {story['title']} » ?", "vague"),
+    }
+    sent = _send_general("wave", payload, vapid)
+    auth.log_notification("wave", today, story["urls"], story["title"], sent)
+
+
+def announce(title: str, body: str, url: str = "/", test_user_id: int | None = None) -> int:
+    """An announcement written in #/diffusion: to every device that takes
+    them, or only to the sender's own devices for a test."""
+    vapid = _vapid()
+    if not vapid:
+        return 0
+    # Only a page of the app, marked so its openings are counted
+    url = url if url.startswith("/#/") else "/#/"
+    payload = {"title": title, "body": body, "url": f"{url}{'&' if '?' in url else '?'}n=annonce"}
+    if test_user_id is not None:
+        sent, _ = _send(auth.list_user_subscriptions(test_user_id), json.dumps(payload), vapid)
+        return sent
+    sent = _send_general("alerts", payload, vapid)
+    auth.log_notification("alerts", api.gabon_today().isoformat(), [], title, sent)
+    return sent
+
+
 if __name__ == "__main__":
+    # python push_notify.py [spikes|morning|wave]; spikes when nothing is given
+    import sys
     logging.basicConfig(level=logging.INFO)
-    send_spike_notifications()
+    {"spikes": send_spike_notifications, "morning": send_morning, "wave": send_wave}[
+        sys.argv[1] if len(sys.argv) > 1 else "spikes"
+    ]()

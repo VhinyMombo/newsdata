@@ -1,4 +1,5 @@
-import { BarChart3, FileText, LogIn, MessageSquare, Newspaper, Scale } from 'lucide-react';
+import { BarChart3, Bell, FileText, LogIn, MessageSquare, Newspaper, Scale } from 'lucide-react';
+import { pushSupported } from '../utils/push';
 
 const SECTIONS = [
   { id: 'une', label: 'À la une', short: 'Une', Icon: Newspaper },
@@ -50,6 +51,11 @@ export default function Masthead({ view, health, session }) {
             <button className={`k-status ${apiStatus}`} onClick={checkApi} title={time ? `${statusLabel}, vérifié à ${time}. Cliquer pour revérifier.` : statusLabel} aria-label={statusLabel}>
               <i aria-hidden="true" />
             </button>
+            {pushSupported && (
+              <a className="k-bell" href="#/notifications" aria-current={view === 'notifications' ? 'page' : undefined} aria-label="Notifications" title="Notifications">
+                <Bell size={17} strokeWidth={1.7} />
+              </a>
+            )}
             <Account session={session} />
             {view !== 'assistant' && <a className="k-btn primary k-header-cta" href="#/assistant">Poser une question</a>}
           </div>

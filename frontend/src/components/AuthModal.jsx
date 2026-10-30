@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../utils/api';
 import { PLATFORM, isStandalone } from '../hooks/useInstall';
+import { registerDevice } from '../utils/push';
 
 // Google refuses to sign in inside the browsers built into WhatsApp, Facebook or
 // Instagram ("disallowed_useragent"): offer it only where it works
@@ -161,6 +162,8 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
       body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
     });
     if (!res.ok) throw new Error("Échec de l'enregistrement des notifications.");
+    // The device takes the general notifications too (#/notifications)
+    registerDevice(sub).catch(() => {});
     setPushEnabled(true);
   }, [authToken, vapidKey]);
 
@@ -173,6 +176,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
         await fetch(`${API_URL}/push/subscribe?endpoint=${encodeURIComponent(existing.endpoint)}`, {
           method: 'DELETE', headers: { Authorization: `Bearer ${authToken}` },
         }).catch(() => {});
+        await fetch(`${API_URL}/push/device?endpoint=${encodeURIComponent(existing.endpoint)}`, { method: 'DELETE' }).catch(() => {});
         await existing.unsubscribe();
         setPushEnabled(false);
         return;
@@ -410,6 +414,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                   {pushEnabled
                     ? "Cet appareil reçoit vos notifications, ainsi qu'une alerte quand un sujet suivi connaît un pic d'actualité."
                     : "Cet appareil ne reçoit pas encore de notifications."}
+                  {' '}<a href="#/notifications" onClick={onClose}>L'essentiel du matin et les autres notifications générales</a>
                 </p>
                 <button
                   type="button"

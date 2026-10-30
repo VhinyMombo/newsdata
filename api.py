@@ -888,6 +888,21 @@ class NotificationPrefsRequest(BaseModel):
     weekly_review: bool | None = None
 
 
+class DevicePrefsRequest(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2000)
+    # Only the settings sent change
+    morning: bool | None = None
+    wave: bool | None = None
+    alerts: bool | None = None
+
+
+class AnnouncementRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    body: str = Field(min_length=1, max_length=240)
+    url: str = Field(default="/#/", max_length=300)
+    test: bool = True
+
+
 def _bearer_token(authorization: str | None = Header(default=None)) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -898,6 +913,20 @@ def require_user(token: str | None = Depends(_bearer_token)) -> dict:
     user = auth.get_user_by_token(token) if token else None
     if not user:
         raise HTTPException(status_code=401, detail="Authentification requise.")
+    return user
+
+
+# Accounts allowed to send announcements from #/diffusion (.env.docker, comma-separated)
+ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
+
+
+def is_admin(user: dict) -> bool:
+    return bool(user.get("email")) and user["email"].lower() in ADMIN_EMAILS
+
+
+def require_admin(user: dict = Depends(require_user)) -> dict:
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Réservé à l'équipe du Kiosque.")
     return user
 
 
@@ -1191,6 +1220,72 @@ def put_push_preferences(req: NotificationPrefsRequest, user: dict = Depends(req
     for pref, on in req.model_dump(exclude_none=True).items():
         auth.set_notification_pref(user["id"], pref, on)
     return auth.get_notification_prefs(user["id"])
+
+
+# A device that accepted notifications, signed in or not: it takes the general
+# ones (push_notify.send_morning, send_wave, announce). Its endpoint, known only
+# to the device and its push service, is what identifies it.
+@app.post("/push/device")
+@limiter.limit("20/minute")
+def push_device(request: Request, req: PushSubscribeRequest):
+    if not req.endpoint.startswith("https://"):
+        raise HTTPException(status_code=422, detail="Adresse de notification invalide.")
+    return auth.register_device(req.endpoint, req.keys.p256dh, req.keys.auth)
+
+
+@app.get("/push/device")
+@limiter.limit("30/minute")
+def push_device_prefs(request: Request, endpoint: str = Query(min_length=1, max_length=2000)):
+    prefs = auth.get_device_prefs(endpoint)
+    if prefs is None:
+        raise HTTPException(status_code=404, detail="Appareil inconnu.")
+    return prefs
+
+
+@app.put("/push/device")
+@limiter.limit("30/minute")
+def put_push_device_prefs(request: Request, req: DevicePrefsRequest):
+    if auth.get_device_prefs(req.endpoint) is None:
+        raise HTTPException(status_code=404, detail="Appareil inconnu.")
+    for pref, on in req.model_dump(exclude_none=True, exclude={"endpoint"}).items():
+        auth.set_device_pref(req.endpoint, pref, on)
+    return auth.get_device_prefs(req.endpoint)
+
+
+@app.delete("/push/device")
+@limiter.limit("20/minute")
+def delete_push_device(request: Request, endpoint: str = Query(min_length=1, max_length=2000)):
+    auth.remove_device(endpoint)
+    return {"status": "ok"}
+
+
+@app.get("/admin/me")
+def admin_me(user: dict = Depends(require_user)):
+    return {"admin": is_admin(user)}
+
+
+@app.get("/admin/announcements")
+def admin_announcements(user: dict = Depends(require_admin)):
+    """What #/diffusion shows: how many devices each general notification reaches,
+    and the last ones sent."""
+    since = (gabon_today() - timedelta(days=30)).isoformat()
+    history = sorted(
+        (dict(row, kind=kind) for kind in auth.DEVICE_PREFS for row in auth.notifications_sent(kind, since)),
+        key=lambda r: r["id"], reverse=True,
+    )
+    return {
+        "devices": auth.count_devices(),
+        "history": [{k: r[k] for k in ("kind", "day", "title", "sent", "sent_at")} for r in history[:30]],
+    }
+
+
+@app.post("/admin/announcements")
+@limiter.limit("10/minute")
+def admin_announce(request: Request, req: AnnouncementRequest, user: dict = Depends(require_admin)):
+    import push_notify  # imports this module: loaded on first use, not at startup
+    sent = push_notify.announce(req.title.strip(), req.body.strip(), req.url.strip(),
+                                test_user_id=user["id"] if req.test else None)
+    return {"sent": sent, "test": req.test}
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

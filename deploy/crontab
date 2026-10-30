@@ -5,7 +5,10 @@
 # existing map (MAP=append: a few minutes, no naming calls), and a full redraw of
 # the map with its themes named by Gemini at 8:20, 13:20 and 19:20. The daily
 # brief at 20:30, the weekly review on Friday at 18:00, the backup at 3:30
-# (deploy/backup.sh). A collection still running makes the next one skip rather
+# (deploy/backup.sh). The general notifications (push_notify.py, every device
+# that accepted them): l'essentiel du matin at 7:30, and from 7:40 to 21:40, once
+# the hour's collection is in, a check for a story the whole press picks up
+# (one alert a day at most, nothing at night). A collection still running makes the next one skip rather
 # than overlap; the redraw waits for it.
 # After each collection the schedule touches newspaper_chroma_db/.updated: the API
 # then reloads its in-memory index by itself (api._watch_index), without the
@@ -16,6 +19,8 @@ DC="docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml --pro
 
 0 6-21,23 * * * cd $KIOSQUE && flock -n /tmp/lekiosque-pipeline.lock $DC run --rm -e MAP=append pipeline 1 >> logs/pipeline_scheduled.log 2>&1 && touch newspaper_chroma_db/.updated
 20 8,13,19 * * * cd $KIOSQUE && flock -w 1800 /tmp/lekiosque-pipeline.lock $DC run --rm --entrypoint python pipeline scripts/export_embeddings.py >> logs/map.log 2>&1
+30 7 * * * cd $KIOSQUE && flock -w 900 /tmp/lekiosque-pipeline.lock $DC run --rm --entrypoint python pipeline push_notify.py morning >> logs/notifications.log 2>&1
+40 7-21 * * * cd $KIOSQUE && flock -w 900 /tmp/lekiosque-pipeline.lock $DC run --rm --entrypoint python pipeline push_notify.py wave >> logs/notifications.log 2>&1
 30 20 * * * cd $KIOSQUE && $DC run --rm --entrypoint python pipeline scripts/generate_scheduled_report.py >> logs/scheduled_report.log 2>&1
 0 18 * * 5 cd $KIOSQUE && $DC run --rm --entrypoint python pipeline scripts/generate_scheduled_report.py --weekly >> logs/scheduled_report.log 2>&1
 30 3 * * * cd $KIOSQUE && bash deploy/backup.sh >> logs/backup.log 2>&1

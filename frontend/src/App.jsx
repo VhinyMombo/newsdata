@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef } from 'react';
 import Masthead from './components/Masthead';
 import AuthModal from './components/AuthModal';
 import InstallBanner from './components/InstallBanner';
@@ -8,6 +8,9 @@ import Assistant from './views/Assistant';
 import Editions from './views/Editions';
 import Codes from './views/Codes';
 import Journaux from './views/Journaux';
+import Notifications from './views/Notifications';
+import Diffusion from './views/Diffusion';
+import NotifPrompt from './components/NotifPrompt';
 import { go, useRoute } from './hooks/useRoute';
 import { useSession } from './hooks/useSession';
 import { useHealth } from './hooks/useHealth';
@@ -68,15 +71,27 @@ export default function App() {
     else if (error === 'fournisseur') showAuthError("Le service de connexion n'a pas répondu. Réessayez dans un instant.");
   }, [route, exchange, showAuthError]);
 
+  // #/assistant?q=… (a "toute la presse en parle" notification, an announcement)
+  // asks that question, then drops it so going back does not ask it again
+  // (the route object keeps q after replaceState: remember it was handled)
+  const askedFromLink = useRef(null);
+  useEffect(() => {
+    if (route.view !== 'assistant' || !route.params.get('q') || askedFromLink.current === route) return;
+    askedFromLink.current = route;
+    window.history.replaceState(null, '', '#/assistant');
+    ask(route.params.get('q'));
+  }, [route, ask]);
+
   // #/journal/<source> is a page of the Journaux section
   const view = route.view === 'journal' ? 'journaux'
-    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux'].includes(route.view) ? route.view : 'une';
+    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux', 'notifications', 'diffusion'].includes(route.view) ? route.view : 'une';
 
   return (
     <div className={`k-app view-${view}`}>
       <Masthead view={view} health={health} session={session} />
       <PullToRefresh disabled={view === 'assistant' || !!session.authModal} />
       {view !== 'assistant' && <InstallBanner />}
+      {view !== 'assistant' && view !== 'notifications' && <NotifPrompt authToken={session.authToken} />}
 
       {session.authModal && (
         <AuthModal
@@ -109,6 +124,8 @@ export default function App() {
         )}
         {view === 'codes' && <Codes codes={codes} ask={ask} />}
         {view === 'journaux' && <Journaux sub={route.view === 'journal' ? route.sub : null} ask={ask} />}
+        {view === 'notifications' && <Notifications session={session} />}
+        {view === 'diffusion' && <Diffusion session={session} />}
       </main>
     </div>
   );
