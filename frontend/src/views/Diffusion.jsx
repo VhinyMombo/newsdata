@@ -65,6 +65,9 @@ export default function Diffusion({ session }) {
     );
   }
 
+  // « {prénom} » becomes each reader's first name; the preview shows the sender's
+  const firstName = (user?.display_name || '').trim().split(' ')[0];
+  const greet = (s) => s.replace(/\{\s*pr[ée]nom\s*\}/gi, firstName).replace(/ ,/g, ',');
   const reach = stats?.devices?.alerts ?? 0;
   const ready = title.trim() && body.trim();
   return (
@@ -83,14 +86,14 @@ export default function Diffusion({ session }) {
         <input id="d-title" className="k-input" value={title} maxLength={80} onChange={e => setTitle(e.target.value)} placeholder="Loi de finances 2027" />
         <label className="k-label" htmlFor="d-body">Texte</label>
         <textarea id="d-body" className="k-input" rows={3} value={body} maxLength={240} onChange={e => setBody(e.target.value)} placeholder="Ce que la presse en dit, journal par journal." />
-        <small className="k-muted">{body.length} / 240</small>
+        <small className="k-muted">{body.length} / 240 · Écrivez {'{prénom}'} pour saluer chaque lecteur par son prénom (« Bonjour {'{prénom}'}, … ») ; sans compte, il lit « Bonjour, … ».</small>
         <label className="k-label" htmlFor="d-url">Page ouverte</label>
         <input id="d-url" className="k-input" value={url} maxLength={300} onChange={e => setUrl(e.target.value)} />
         <small className="k-muted">Une page du Kiosque : /#/ (la Une), /#/editions, /#/assistant?q=Votre question…</small>
 
         <div className="k-notif-preview" aria-label="Aperçu">
           <img src="/icons/icon-192.png" alt="" width="36" height="36" />
-          <div><strong>{title || 'Titre'}</strong><p>{body || 'Texte de la notification'}</p></div>
+          <div><strong>{greet(title) || 'Titre'}</strong><p>{greet(body) || 'Texte de la notification'}</p></div>
         </div>
 
         {confirming ? (

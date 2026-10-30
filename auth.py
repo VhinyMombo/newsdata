@@ -448,13 +448,29 @@ def remove_device(endpoint: str) -> None:
         conn.execute("DELETE FROM devices WHERE endpoint = ?", (endpoint,))
 
 
+def first_name(display_name: str | None) -> str:
+    """How a notification greets a reader: the first word of their display name
+    ("Vhiny MOMBO" → "Vhiny"), nothing when it looks like an address."""
+    word = (display_name or "").strip().split(" ")[0].strip(" ,.;:")
+    if "@" in word:
+        return ""
+    if word.isupper() and len(word) > 1:
+        word = word.capitalize()
+    return (word[:1].upper() + word[1:])[:30]
+
+
 def list_devices_for(pref: str) -> list[dict]:
-    """Every device that takes this general notification."""
+    """Every device that takes this general notification, with the first name of
+    the account it was turned on from (empty for a device without an account)."""
     if pref not in DEVICE_PREFS:
         raise AuthError("Réglage de notification inconnu.")
     with _conn() as conn:
-        rows = conn.execute(f"SELECT endpoint, p256dh, auth_key FROM devices WHERE {pref} = 1").fetchall()
-        return [dict(r) for r in rows]
+        rows = conn.execute(
+            f"SELECT d.endpoint, d.p256dh, d.auth_key, u.display_name FROM devices d "
+            f"LEFT JOIN push_subscriptions ps ON ps.endpoint = d.endpoint "
+            f"LEFT JOIN users u ON u.id = ps.user_id WHERE d.{pref} = 1"
+        ).fetchall()
+        return [{**dict(r), "first_name": first_name(r["display_name"])} for r in rows]
 
 
 def count_devices() -> dict:
@@ -469,9 +485,10 @@ def list_user_subscriptions(user_id: int) -> list[dict]:
     """The devices of one reader (an announcement's test goes to the sender alone)."""
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT endpoint, p256dh, auth_key FROM push_subscriptions WHERE user_id = ?", (user_id,)
+            "SELECT ps.endpoint, ps.p256dh, ps.auth_key, u.display_name FROM push_subscriptions ps "
+            "JOIN users u ON u.id = ps.user_id WHERE ps.user_id = ?", (user_id,)
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "first_name": first_name(r["display_name"])} for r in rows]
 
 
 def log_notification(kind: str, day: str, keys: list[str], title: str, sent: int) -> None:

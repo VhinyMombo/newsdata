@@ -96,6 +96,20 @@ def _vapid() -> tuple[str, str] | None:
     return vapid_private_key, os.getenv("VAPID_SUBJECT", "mailto:admin@example.com")
 
 
+# Where a notification greets the reader by name ("Bonjour {prenom}, …"): filled in
+# per device from its account; a device without one gets "Bonjour, …"
+NAME_MARK = "{prenom}"
+_NAME_TYPED_RE = re.compile(r"\{\s*pr[ée]nom\s*\}", re.IGNORECASE)
+
+
+def _greet(payload: str, name: str) -> str:
+    if NAME_MARK not in payload:
+        return payload
+    if name:
+        return payload.replace(NAME_MARK, json.dumps(name)[1:-1])  # escaped as in the JSON
+    return re.sub(r" ?\{prenom\}", "", payload)
+
+
 def _send(subscriptions: list[dict], payload: str, vapid: tuple[str, str]) -> tuple[int, int]:
     """Push one payload to each subscription; drop those the push service says are gone."""
     vapid_private_key, vapid_claims_sub = vapid
@@ -107,7 +121,7 @@ def _send(subscriptions: list[dict], payload: str, vapid: tuple[str, str]) -> tu
                     "endpoint": sub["endpoint"],
                     "keys": {"p256dh": sub["p256dh"], "auth": sub["auth_key"]},
                 },
-                data=payload,
+                data=_greet(payload, sub.get("first_name", "")),
                 vapid_private_key=vapid_private_key,
                 vapid_claims={"sub": vapid_claims_sub},
             )
@@ -302,7 +316,8 @@ def send_morning() -> None:
         log.info("morning: no article since yesterday evening — nothing sent.")
         return
     body = "\n".join(f"• {_short(s['title'])} ({SOURCE_LABELS.get(s['source'], s['source'])})" for s in stories)
-    sent = _send_general("morning", {"title": "L'essentiel du matin", "body": body, "url": "/#/?n=matin"}, vapid)
+    title = f"Bonjour {NAME_MARK}, voici l'essentiel du matin"
+    sent = _send_general("morning", {"title": title, "body": body, "url": "/#/?n=matin"}, vapid)
     auth.log_notification("morning", today, [u for s in stories for u in s["urls"]], stories[0]["title"], sent)
 
 
@@ -347,6 +362,8 @@ def announce(title: str, body: str, url: str = "/", test_user_id: int | None = N
         return 0
     # Only a page of the app, marked so its openings are counted
     url = url if url.startswith("/#/") else "/#/"
+    # « {prénom} » as typed in #/diffusion becomes each reader's first name
+    title, body = _NAME_TYPED_RE.sub(NAME_MARK, title), _NAME_TYPED_RE.sub(NAME_MARK, body)
     payload = {"title": title, "body": body, "url": f"{url}{'&' if '?' in url else '?'}n=annonce"}
     if test_user_id is not None:
         sent, _ = _send(auth.list_user_subscriptions(test_user_id), json.dumps(payload), vapid)
