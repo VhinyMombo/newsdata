@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Download, MessageCircle, RefreshCw } from 'lucide-react';
 import { AnswerText, ReportSkeleton, Thinking } from '../utils/text';
-import { longDate } from '../utils/format';
+import { longDate, opening } from '../utils/format';
 import { go } from '../hooks/useRoute';
 import { track } from '../utils/track';
 
@@ -11,17 +11,6 @@ const TABS = [
   ['archives', 'Archives'],
 ];
 const KIND = { jour: 'daily', semaine: 'weekly' };
-
-// The edition's opening sentence, without its markdown, cut on a word if too long;
-// a heading standing alone above the first paragraph is skipped
-// (the same cut as the evening notification, push_notify.brief_body)
-function opening(text) {
-  const paragraphs = (text || '').trim().split('\n\n').filter(p => p.trim());
-  const prose = paragraphs.find(p => !/^(#+ .*|\*\*[^*\n]+\*\*)$/.test(p.trim())) ?? paragraphs[0] ?? '';
-  const first = prose.replace(/[*_#>`]+/g, '').trim();
-  const sentence = first.split(/(?<=[.!?…])\s/)[0];
-  return sentence.length <= 220 ? sentence : `${sentence.slice(0, 220).replace(/\s+\S*$/, '').replace(/[,;:]$/, '')}…`;
-}
 
 // Today in Gabon (UTC+1), not on the reader's clock, as the editions are dated
 const gabonToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Libreville' }).format(new Date());

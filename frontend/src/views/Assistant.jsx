@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, Map as MapIcon, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, Map as MapIcon, MessageCircle, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 import { API_URL } from '../utils/api';
+import { opening, sourceLabel } from '../utils/format';
+import { track } from '../utils/track';
 
 const SUGGESTIONS = {
   presse: [
@@ -85,6 +87,16 @@ function useSteadyText(text, live) {
   return text.slice(0, cut > 0 ? cut : n);
 }
 
+// A WhatsApp message carrying the answer, as for the editions: the question (for an
+// article opened with « Expliquer », its title and newspaper, as on the front page),
+// the answer's opening sentence, the first article cited, and a link to Le Kiosque
+function whatsappHref({ question, answer, sources, pinned }) {
+  const head = pinned?.title ? `${pinned.title}\n${sourceLabel(pinned.source)}` : question;
+  const article = sources?.[0]?.url ? `\n\nL'article : ${sources[0].url}` : '';
+  const message = `${head}\n\n${opening(answer)}${article}\n\nVu sur Le Kiosque : ${window.location.origin}/`;
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
 function Turn({ entry, idx, live, chat }) {
   const [copied, setCopied] = useState(false);
   const shown = useSteadyText(entry.answer || '', live);
@@ -107,6 +119,10 @@ function Turn({ entry, idx, live, chat }) {
           {!writing && (
             <div className="k-turn-actions">
               <button className="k-btn ghost" onClick={copy}>{copied ? 'Copié' : 'Copier la réponse'}</button>
+              <a className="k-btn ghost" href={whatsappHref(entry)} target="_blank" rel="noreferrer"
+                onClick={() => track('partage', { canal: 'whatsapp', vue: 'assistant' })}>
+                <MessageCircle size={14} /> WhatsApp
+              </a>
             </div>
           )}
         </div>

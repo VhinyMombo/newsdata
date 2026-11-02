@@ -30,3 +30,14 @@ export const clock = (ts) => {
   if (Number.isNaN(d.getTime())) return ts.slice(11, 16).replace(':', ' h ');
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', ' h ');
 };
+
+// The opening sentence of an edition or an answer, without its markdown or its [n]
+// citations, cut on a word if too long; a heading standing alone above the first
+// paragraph is skipped (the same cut as the evening notification, push_notify.brief_body)
+export function opening(text) {
+  const paragraphs = (text || '').trim().split('\n\n').filter(p => p.trim());
+  const prose = paragraphs.find(p => !/^(#+ .*|\*\*[^*\n]+\*\*)$/.test(p.trim())) ?? paragraphs[0] ?? '';
+  const first = prose.replace(/\s*\[\d{1,2}\]/g, '').replace(/[*_#>`]+/g, '').trim();
+  const sentence = first.split(/(?<=[.!?…])\s/)[0];
+  return sentence.length <= 220 ? sentence : `${sentence.slice(0, 220).replace(/\s+\S*$/, '').replace(/[,;:]$/, '')}…`;
+}
