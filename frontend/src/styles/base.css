@@ -667,3 +667,8 @@ body:has(.k-install) { padding-bottom: 0; background: var(--hero, var(--bg-alt))
   .k-diffusion-history li { grid-template-columns: 1fr auto; }
   .k-diffusion-history li > :nth-child(2) { display: none; }
 }
+
+/* #/r/<id>: an answer shared on WhatsApp */
+.k-shared .k-turn { padding-top: 0; }
+.k-shared-more { margin: 28px 0 10px; }
+.k-shared-more .k-btn { display: inline-flex; align-items: center; gap: 6px; }

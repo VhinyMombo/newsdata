@@ -96,6 +96,17 @@ CREATE TABLE IF NOT EXISTS notification_log (
     sent_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_notification_log_day ON notification_log(kind, day);
+-- Answers shared on WhatsApp from the assistant: the short link /r/<id> opens them
+-- as they were written, with their sources. Only answers the API itself wrote.
+CREATE TABLE IF NOT EXISTS shares (
+    id         TEXT PRIMARY KEY,
+    corpus     TEXT NOT NULL,
+    question   TEXT NOT NULL,
+    headline   TEXT NOT NULL DEFAULT '',
+    answer     TEXT NOT NULL,
+    sources    TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash TEXT PRIMARY KEY,
     user_id    INTEGER NOT NULL,
@@ -747,3 +758,28 @@ def delete_user(user_id: int) -> None:
                       "conversations", "identities", "login_codes", "app_logins"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+def create_share(corpus: str, question: str, headline: str, answer: str, sources: list[dict]) -> str:
+    """Keep a shared answer under a new short id, and return the id."""
+    with _conn() as conn:
+        while True:
+            share_id = secrets.token_urlsafe(6)
+            try:
+                conn.execute(
+                    "INSERT INTO shares (id, corpus, question, headline, answer, sources) VALUES (?, ?, ?, ?, ?, ?)",
+                    (share_id, corpus, question, headline, answer, json.dumps(sources, ensure_ascii=False)),
+                )
+                return share_id
+            except sqlite3.IntegrityError:
+                continue    # the same id twice: draw another
+
+
+def get_share(share_id: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT corpus, question, headline, answer, sources, created_at FROM shares WHERE id = ?", (share_id,)
+        ).fetchone()
+    if not row:
+        return None
+    return {**dict(row), "sources": json.loads(row["sources"])}

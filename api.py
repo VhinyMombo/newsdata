@@ -10,11 +10,13 @@ Usage:
     .venv/bin/python api.py          # runs on http://localhost:8000
 """
 
+import html
 import json
 import logging
 import math
 import os
 import re
+import secrets
 import threading
 import time
 import unicodedata
@@ -137,7 +139,7 @@ app.add_middleware(
     # Custom response headers aren't exposed to browser JS by default even
     # with allow_headers="*" (that governs the request side); the frontend
     # reads X-Report-Source to tell a cache hit from a fresh generation
-    expose_headers=["X-Report-Source", "X-Answer-Source"],
+    expose_headers=["X-Report-Source", "X-Answer-Source", "X-Answer-Id"],
 )
 
 
@@ -726,6 +728,7 @@ class ContextArticle(BaseModel):
     rows: list[str] = []
     # Position in the reader's source list, which the answer cites as [n]
     ref: int = 0
+    url: str = ""
 
 
 class ChatTurn(BaseModel):
@@ -785,6 +788,7 @@ def _fetch_articles(urls: list[str]) -> list[ContextArticle]:
             source    = meta.get("source", ""),
             full_text = "\n\n".join(parts),
             ref       = ref,
+            url       = url,
         ))
     return articles
 
@@ -1629,6 +1633,7 @@ def _fetch_code_extracts(ids: list[str], question: str = "") -> list[ContextArti
             source    = "Journal Officiel",
             full_text = doc,
             rows      = rows.get(id_, []),
+            url       = meta.get("source_url", ""),
         ))
     return extracts
 
@@ -1873,17 +1878,37 @@ def _answer_cache_put(key: str, text: str) -> None:
     _answer_cache[key] = (text, time.time() + ANSWER_CACHE_TTL_S)
 
 
+# Answers written in the last day, by the id sent with them (X-Answer-Id), so that
+# the reader can share one: the shared page then carries the API's own text and
+# sources, never a text sent by the browser.
+ANSWERED_TTL_S = 24 * 3600
+ANSWERED_MAX = 1000
+_answered: dict[str, dict] = {}
+
+
+def _remember_answer(answer_id: str, req: AnswerRequest, text: str) -> None:
+    now = time.time()
+    for key in [k for k, v in _answered.items() if v["expires"] < now]:
+        del _answered[key]
+    while len(_answered) >= ANSWERED_MAX:
+        del _answered[next(iter(_answered))]
+    _answered[answer_id] = dict(corpus=req.corpus, question=req.question.strip(), text=text,
+                                urls=list(req.urls), ids=list(req.ids), expires=now + ANSWERED_TTL_S)
+
+
 @app.post("/answer")
 @limiter.limit("6/minute")
 def answer(request: Request, req: AnswerRequest):
+    answer_id = secrets.token_urlsafe(9)
     cache_key = None
     if not req.history:
         cache_key = _answer_cache_key(req.corpus, req.question, req.urls, req.ids)
         cached = _answer_cache_get(cache_key)
         if cached is not None:
+            _remember_answer(answer_id, req, cached)
             return StreamingResponse(
                 iter([cached]), media_type="text/plain",
-                headers={"X-Answer-Source": "cache"},
+                headers={"X-Answer-Source": "cache", "X-Answer-Id": answer_id},
             )
     try:
         if req.corpus == "codes":
@@ -1935,10 +1960,99 @@ def answer(request: Request, req: AnswerRequest):
         # Same truncation guard as the report cache: an unfinished answer
         # (aborted stream, context limit) must not get served back as if complete
         text = "".join(chunks)
-        if cache_key and text and text[-1] in ".!?»)":
-            _answer_cache_put(cache_key, text)
+        if text and text[-1] in ".!?»)":
+            _remember_answer(answer_id, req, text)
+            if cache_key:
+                _answer_cache_put(cache_key, text)
 
-    return StreamingResponse(generate(), media_type="text/plain", headers={"X-Answer-Source": "fresh"})
+    return StreamingResponse(generate(), media_type="text/plain",
+                             headers={"X-Answer-Source": "fresh", "X-Answer-Id": answer_id})
+
+
+# ── Shared answers ────────────────────────────────────────────────────────────
+# « WhatsApp » under an answer keeps it under a short id; lekiosque.hodologic.fr/r/<id>
+# gives WhatsApp its preview (the article's title, the opening sentence) and opens
+# the answer in the app (#/r/<id>).
+
+EXPLAIN_PREFIX = "Que dit cet article et dans quel contexte"   # frontend utils/explain.js
+PUBLIC_URL = "https://lekiosque.hodologic.fr"
+
+
+def _opening(text: str, n: int = 220) -> str:
+    """First sentence of an answer, without markdown or [n] citations (as utils/format.js)."""
+    paras = [p for p in text.strip().split("\n\n") if p.strip()]
+    prose = next((p for p in paras if not re.fullmatch(r"#+ .*|\*\*[^*\n]+\*\*", p.strip())), paras[0] if paras else "")
+    first = re.sub(r"[*_#>`]+", "", re.sub(r"\s*\[\d{1,2}\]", "", prose)).strip()
+    sentence = re.split(r"(?<=[.!?…])\s", first)[0]
+    if len(sentence) <= n:
+        return sentence
+    return re.sub(r"[,;:]$", "", re.sub(r"\s+\S*$", "", sentence[:n])) + "…"
+
+
+class ShareRequest(BaseModel):
+    answer_id: str = Field(min_length=8, max_length=40)
+
+
+@app.post("/partages")
+@limiter.limit("20/minute")
+def create_share(request: Request, req: ShareRequest):
+    entry = _answered.get(req.answer_id)
+    if not entry or entry["expires"] < time.time():
+        raise HTTPException(status_code=404, detail="Cette réponse ne peut plus être partagée.")
+    if entry.get("share_id"):
+        return {"id": entry["share_id"]}
+    try:
+        items = (_fetch_code_extracts(entry["ids"], entry["question"]) if entry["corpus"] == "codes"
+                 else _fetch_articles(entry["urls"]))
+    except Exception as e:
+        logger.error(f"/partages sources error: {e}")
+        raise HTTPException(status_code=500, detail="Partage impossible pour le moment.")
+    sources = [dict(title=a.title, source=a.source, date=a.date, url=a.url) for a in items]
+    # An article opened with « Expliquer »: the page and the preview carry its title
+    headline = ""
+    if entry["question"].startswith(EXPLAIN_PREFIX) and sources and sources[0]["title"][:300] in entry["question"]:
+        headline = sources[0]["title"]
+    entry["share_id"] = auth.create_share(entry["corpus"], entry["question"], headline, entry["text"], sources)
+    return {"id": entry["share_id"]}
+
+
+@app.get("/partages/{share_id}")
+def read_share(share_id: str = PathParam(max_length=20)):
+    share = auth.get_share(share_id)
+    if not share:
+        raise HTTPException(status_code=404, detail="Réponse introuvable.")
+    return share
+
+
+@app.get("/r/{share_id}", response_class=HTMLResponse)
+def share_page(share_id: str = PathParam(max_length=20)):
+    """What WhatsApp reads for its preview; a reader goes straight on to the answer."""
+    share = auth.get_share(share_id) if re.fullmatch(r"[A-Za-z0-9_-]{4,20}", share_id) else None
+    if not share:
+        return RedirectResponse("/", status_code=302)
+    e = html.escape
+    title = share["headline"] or share["question"]
+    desc = _opening(share["answer"])
+    target = f"/#/r/{share_id}"
+    return HTMLResponse(f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(title)} · Le Kiosque</title>
+<meta name="description" content="{e(desc)}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Le Kiosque">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:url" content="{PUBLIC_URL}/r/{share_id}">
+<meta property="og:title" content="{e(title)}">
+<meta property="og:description" content="{e(desc)}">
+<meta property="og:image" content="{PUBLIC_URL}/og-kiosque-v2.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0; url={target}">
+</head><body style="font:17px/1.55 Georgia,serif;color:#0F2A3A;max-width:520px;margin:48px auto;padding:0 24px">
+<p><a href="{target}" style="color:#7A1F2B">{e(title)}</a></p>
+<script>location.replace({json.dumps(target)});</script>
+</body></html>""")
 
 
 _report_cache: dict = {

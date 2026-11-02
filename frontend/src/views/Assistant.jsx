@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, Map as MapIcon, MessageCircle, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
-import { API_URL } from '../utils/api';
+import { API_URL, postJSON } from '../utils/api';
 import { opening, sourceLabel } from '../utils/format';
 import { track } from '../utils/track';
 
@@ -87,14 +87,26 @@ function useSteadyText(text, live) {
   return text.slice(0, cut > 0 ? cut : n);
 }
 
-// A WhatsApp message carrying the answer, as for the editions: the question (for an
-// article opened with « Expliquer », its title and newspaper, as on the front page),
-// the answer's opening sentence, the first article cited, and a link to Le Kiosque
-function whatsappHref({ question, answer, sources, pinned }) {
+// The answer shared on WhatsApp, as the editions are: the question (for an article
+// opened with « Expliquer », its title and newspaper, as on the front page), the
+// answer's opening sentence, and a short link, lekiosque.hodologic.fr/r/<id>, whose
+// preview carries the same title and which opens the answer as it was written.
+// Without one (an answer from before, the server unreachable), the link asks the
+// same question again.
+async function shareOnWhatsApp({ question, answer, pinned, answerId }, corpus) {
+  // A new tab opened now, on the click: opened after the request, a browser would block it
+  const tab = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? null : window.open('', '_blank');
+  let link = `${window.location.origin}/#/assistant?q=${encodeURIComponent(question)}${corpus === 'codes' ? '&rubrique=lois' : ''}`;
+  if (answerId) {
+    try {
+      const res = await postJSON('/partages', { answer_id: answerId });
+      if (res.ok) link = `${window.location.origin}/r/${(await res.json()).id}`;
+    } catch { /* keep the question link */ }
+  }
   const head = pinned?.title ? `${pinned.title}\n${sourceLabel(pinned.source)}` : question;
-  const article = sources?.[0]?.url ? `\n\nL'article : ${sources[0].url}` : '';
-  const message = `${head}\n\n${opening(answer)}${article}\n\nVu sur Le Kiosque : ${window.location.origin}/`;
-  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const url = `https://wa.me/?text=${encodeURIComponent(`${head}\n\n${opening(answer)}\n\n${link}`)}`;
+  if (tab) tab.location.href = url;
+  else window.location.href = url;
 }
 
 function Turn({ entry, idx, live, chat }) {
@@ -119,10 +131,12 @@ function Turn({ entry, idx, live, chat }) {
           {!writing && (
             <div className="k-turn-actions">
               <button className="k-btn ghost" onClick={copy}>{copied ? 'Copié' : 'Copier la réponse'}</button>
-              <a className="k-btn ghost" href={whatsappHref(entry)} target="_blank" rel="noreferrer"
-                onClick={() => track('partage', { canal: 'whatsapp', vue: 'assistant' })}>
+              <button className="k-btn ghost" onClick={() => {
+                track('partage', { canal: 'whatsapp', vue: 'assistant' });
+                shareOnWhatsApp(entry, chat.corpus);
+              }}>
                 <MessageCircle size={14} /> WhatsApp
-              </a>
+              </button>
             </div>
           )}
         </div>

@@ -22,6 +22,7 @@ import { useCorpusData } from './hooks/useCorpusData';
 
 // Plotly and the dashboard are heavy: only fetched when Tendances is opened
 const Tendances = lazy(() => import('./views/Tendances'));
+const Partage = lazy(() => import('./views/Partage'));
 
 export default function App() {
   const route = useRoute();
@@ -71,20 +72,20 @@ export default function App() {
     else if (error === 'fournisseur') showAuthError("Le service de connexion n'a pas répondu. Réessayez dans un instant.");
   }, [route, exchange, showAuthError]);
 
-  // #/assistant?q=… (a "toute la presse en parle" notification, an announcement)
-  // asks that question, then drops it so going back does not ask it again
+  // #/assistant?q=… (a "toute la presse en parle" notification, an announcement, an
+  // answer shared on WhatsApp; &rubrique=lois for the laws) asks that question, then drops it so going back does not ask it again
   // (the route object keeps q after replaceState: remember it was handled)
   const askedFromLink = useRef(null);
   useEffect(() => {
     if (route.view !== 'assistant' || !route.params.get('q') || askedFromLink.current === route) return;
     askedFromLink.current = route;
     window.history.replaceState(null, '', '#/assistant');
-    ask(route.params.get('q'));
+    ask(route.params.get('q'), route.params.get('rubrique') === 'lois' ? 'codes' : 'presse');
   }, [route, ask]);
 
   // #/journal/<source> is a page of the Journaux section
   const view = route.view === 'journal' ? 'journaux'
-    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux', 'notifications', 'diffusion'].includes(route.view) ? route.view : 'une';
+    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux', 'notifications', 'diffusion', 'r'].includes(route.view) ? route.view : 'une';
 
   return (
     <div className={`k-app view-${view}`}>
@@ -126,6 +127,11 @@ export default function App() {
         {view === 'journaux' && <Journaux sub={route.view === 'journal' ? route.sub : null} ask={ask} />}
         {view === 'notifications' && <Notifications session={session} />}
         {view === 'diffusion' && <Diffusion session={session} />}
+        {view === 'r' && (
+          <Suspense fallback={<div className="k-page"><p className="k-muted">Chargement…</p></div>}>
+            <Partage key={route.sub} id={route.sub} />
+          </Suspense>
+        )}
       </main>
     </div>
   );

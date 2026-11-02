@@ -116,7 +116,9 @@ export function useChat({ setApiStatus, authToken }) {
       if (!streamRes.ok) throw new Error(`La génération a échoué (${streamRes.status}).`);
       // Same question and sources answered recently: served from cache, and said so
       const fromCache = streamRes.headers.get('X-Answer-Source') === 'cache';
-      answer = await readStream(streamRes, (text) => { answer = text; patch({ answer: text, fromCache }); });
+      // Its id lets the reader share it (« WhatsApp » under the answer, POST /partages)
+      const answerId = streamRes.headers.get('X-Answer-Id');
+      answer = await readStream(streamRes, (text) => { answer = text; patch({ answer: text, fromCache, answerId }); });
       setApiStatus('online');
     } catch (err) {
       if (err.name === 'AbortError') {
