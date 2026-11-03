@@ -2033,7 +2033,8 @@ def share_page(share_id: str = PathParam(max_length=20)):
     e = html.escape
     title = share["headline"] or share["question"]
     desc = _opening(share["answer"])
-    target = f"/#/r/{share_id}"
+    # Marked as a WhatsApp share, for the statistics (frontend utils/format.js tagged)
+    target = f"/?utm_source=partage-whatsapp&utm_medium=partage&utm_campaign=reponse#/r/{share_id}"
     return HTMLResponse(f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{e(title)} · Le Kiosque</title>

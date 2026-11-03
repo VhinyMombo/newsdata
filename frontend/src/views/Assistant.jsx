@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, Map as MapIco
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 import { API_URL, postJSON } from '../utils/api';
-import { opening, sourceLabel } from '../utils/format';
+import { opening, sourceLabel, tagged } from '../utils/format';
 import { track } from '../utils/track';
 
 const SUGGESTIONS = {
@@ -96,7 +96,7 @@ function useSteadyText(text, live) {
 async function shareOnWhatsApp({ question, answer, pinned, answerId }, corpus) {
   // A new tab opened now, on the click: opened after the request, a browser would block it
   const tab = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? null : window.open('', '_blank');
-  let link = `${window.location.origin}/#/assistant?q=${encodeURIComponent(question)}${corpus === 'codes' ? '&rubrique=lois' : ''}`;
+  let link = tagged(`assistant?q=${encodeURIComponent(question)}${corpus === 'codes' ? '&rubrique=lois' : ''}`, 'reponse');
   if (answerId) {
     try {
       const res = await postJSON('/partages', { answer_id: answerId });

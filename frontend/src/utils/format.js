@@ -8,6 +8,11 @@ export const SOURCE_LABELS = {
   medias241: 'Médias241', gabonmatin: 'Gabon Matin',
 };
 export const sourceLabel = (s) => SOURCE_LABELS[s] || s;
+
+// A link to the app that says where the reader came from, in the statistics: the
+// ?utm_… goes before the #route, where Umami reads it (index.html keeps it there)
+export const tagged = (route, campaign, source = 'partage-whatsapp') =>
+  `${window.location.origin}/?utm_source=${source}&utm_medium=partage&utm_campaign=${campaign}#/${route}`;
 // Each newspaper's own site, linked from its page (#/journal/<source>)
 export const SOURCE_SITES = {
   gabonreview: 'https://www.gabonreview.com', gabonmediatime: 'https://gabonmediatime.com', gabonactu: 'https://gabonactu.com',

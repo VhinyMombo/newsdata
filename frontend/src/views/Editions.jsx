@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Download, MessageCircle, RefreshCw } from 'lucide-react';
 import { AnswerText, ReportSkeleton, Thinking } from '../utils/text';
-import { longDate, opening } from '../utils/format';
+import { longDate, opening, tagged } from '../utils/format';
 import { go } from '../hooks/useRoute';
 import { track } from '../utils/track';
 
@@ -21,7 +21,7 @@ const gabonToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Li
 function whatsappHref({ kind, date, text, archiveId }) {
   const name = kind === 'daily' ? 'Le point du jour' : 'La revue de la semaine';
   const path = archiveId ? `editions/archive?id=${archiveId}` : `editions/${kind === 'daily' ? 'jour' : 'semaine'}`;
-  const message = `${name} du Kiosque, ${longDate(date)}\n\n${opening(text)}\n\n${window.location.origin}/#/${path}`;
+  const message = `${name} du Kiosque, ${longDate(date)}\n\n${opening(text)}\n\n${tagged(path, 'edition')}`;
   return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 

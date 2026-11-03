@@ -110,9 +110,21 @@ def _greet(payload: str, name: str) -> str:
     return re.sub(r" ?\{prenom\}", "", payload)
 
 
+def _tagged(payload: str) -> str:
+    """The link of a notification into the app, marked for the statistics: the visit
+    it opens counts under utm_source=notification, campaign = its n=<kind>."""
+    data = json.loads(payload)
+    url = data.get("url", "")
+    if url.startswith("/#"):
+        kind = re.search(r"[?&]n=([\w-]+)", url)
+        data["url"] = f"/?utm_source=notification&utm_medium=push&utm_campaign={kind.group(1) if kind else 'autre'}{url[1:]}"
+    return json.dumps(data)
+
+
 def _send(subscriptions: list[dict], payload: str, vapid: tuple[str, str]) -> tuple[int, int]:
     """Push one payload to each subscription; drop those the push service says are gone."""
     vapid_private_key, vapid_claims_sub = vapid
+    payload = _tagged(payload)
     sent, pruned = 0, 0
     for sub in subscriptions:
         try:

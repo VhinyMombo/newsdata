@@ -96,12 +96,14 @@
     <!-- Visitor statistics (Umami, stats.hodologic.fr): no cookies, production only.
     The app routes by #hash, which the tracker neither follows nor records: each
     change of rubrique counts as a page view, filed under its path (#/editions as
-    /editions). The tag says whether the visit is in the browser or the installed app. -->
+    /editions), with the ?utm_… of the link that brought the reader (a WhatsApp share,
+    a notification, a post), which Umami files by channel. The tag says whether the
+    visit is in the browser or the installed app. -->
     <script>
       (function () {
         window.__kiosqueStats = function (type, payload) {
           var view = location.hash.replace(/^#\/?/, '').split('?')[0];
-          if (view && payload.url) payload.url = location.origin + '/' + view;
+          if (view && payload.url) payload.url = location.origin + '/' + view + location.search;
           return payload;
         };
         var app = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
