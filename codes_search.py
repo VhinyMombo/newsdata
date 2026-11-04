@@ -35,6 +35,7 @@ CODE_LABEL = {
     "codes_enfants": "Code de l'enfant",
     "codes_nationalites": "Code de la nationalité",
     "code_travail": "Code du travail",
+    "constitution": "Constitution de la République gabonaise (2024)",
     "loi_de_finances_2026": "Loi de finances 2026 (LF 2026)",
     "projet_loi_de_finances_2027": "Projet de loi de finances 2027 (PLF 2027)",
 }

@@ -15,13 +15,13 @@ const SUGGESTIONS = {
   codes: [
     'Quelles sont les sanctions pour le vol ?',
     'Comment obtenir la nationalité gabonaise ?',
-    "Que dit le code minier sur les permis d'exploitation ?",
+    'Que dit la Constitution sur le mandat du Président ?',
   ],
 };
 
 const MODES = [
   ['presse', 'Actualité', Newspaper, 'Cherche dans les articles des journaux gabonais.'],
-  ['codes', 'Lois', Scale, 'Cherche dans les codes publiés au Journal officiel.'],
+  ['codes', 'Lois', Scale, 'Cherche dans la Constitution et les codes publiés au Journal officiel.'],
   ['comparer', 'Comparer', GitCompare, 'Un même sujet sur deux périodes.'],
 ];
 

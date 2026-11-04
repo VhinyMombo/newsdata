@@ -257,6 +257,7 @@ CODE_LABELS = {
     "codes_hydrocarbures":  "Code des hydrocarbures",
     "codes_nationalites":   "Code de la nationalité",
     "code_travail":         "Code du travail",
+    "constitution":         "Constitution",
     "loi_de_finances_2026": "Loi de Finances 2026",
     "projet_loi_de_finances_2027": "Projet de loi de finances 2027 (non adopté)",
 }
@@ -1475,6 +1476,8 @@ _CODE_HINTS = [
     (re.compile(r"code\s+de\s+l.enfant", re.I), "codes_enfants"),
     (re.compile(r"hydrocarbures", re.I), "codes_hydrocarbures"),
     (re.compile(r"nationalit[ée]", re.I), "codes_nationalites"),
+    (re.compile(r"code\s+du\s+travail", re.I), "code_travail"),
+    (re.compile(r"\bconstitution\b", re.I), "constitution"),
 ]
 _ARTICLE_NAMED = re.compile(r"\bart(?:icle|\.)\s*(\d+)\s*(er|bis|ter|quater|quinquies)?\b", re.I)
 
