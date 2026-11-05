@@ -10,6 +10,7 @@ import Codes from './views/Codes';
 import Journaux from './views/Journaux';
 import Notifications from './views/Notifications';
 import Diffusion from './views/Diffusion';
+import Suggestions from './views/Suggestions';
 import NotifPrompt from './components/NotifPrompt';
 import { go, useRoute } from './hooks/useRoute';
 import { useSession } from './hooks/useSession';
@@ -85,7 +86,7 @@ export default function App() {
 
   // #/journal/<source> is a page of the Journaux section
   const view = route.view === 'journal' ? 'journaux'
-    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux', 'notifications', 'diffusion', 'r'].includes(route.view) ? route.view : 'une';
+    : ['une', 'assistant', 'editions', 'tendances', 'codes', 'journaux', 'notifications', 'diffusion', 'suggestions', 'r'].includes(route.view) ? route.view : 'une';
 
   return (
     <div className={`k-app view-${view}`}>
@@ -127,6 +128,7 @@ export default function App() {
         {view === 'journaux' && <Journaux sub={route.view === 'journal' ? route.sub : null} ask={ask} />}
         {view === 'notifications' && <Notifications session={session} />}
         {view === 'diffusion' && <Diffusion session={session} />}
+        {view === 'suggestions' && <Suggestions session={session} from={route.params.get('depuis')} />}
         {view === 'r' && (
           <Suspense fallback={<div className="k-page"><p className="k-muted">Chargement…</p></div>}>
             <Partage key={route.sub} id={route.sub} />

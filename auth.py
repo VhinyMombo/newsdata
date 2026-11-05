@@ -154,6 +154,20 @@ CREATE TABLE IF NOT EXISTS login_codes (
     expires_at TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+-- Readers' ideas and problems for the app (#/suggestions), with or without an
+-- account; the team sorts them by status
+CREATE TABLE IF NOT EXISTS suggestions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER,
+    kind       TEXT NOT NULL CHECK (kind IN ('idee', 'probleme', 'autre')),
+    message    TEXT NOT NULL,
+    contact    TEXT NOT NULL DEFAULT '',
+    page       TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL DEFAULT 'nouvelle'
+               CHECK (status IN ('nouvelle', 'retenue', 'faite', 'ecartee')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_suggestions_recent ON suggestions(status, id);
 """
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -757,6 +771,8 @@ def delete_user(user_id: int) -> None:
         for table in ("sessions", "follows", "push_subscriptions", "notification_prefs", "password_resets",
                       "conversations", "identities", "login_codes", "app_logins"):
             conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+        # Ideas already sent stay, without who sent them
+        conn.execute("UPDATE suggestions SET user_id = NULL, contact = '' WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
 
@@ -783,3 +799,39 @@ def get_share(share_id: str) -> dict | None:
     if not row:
         return None
     return {**dict(row), "sources": json.loads(row["sources"])}
+
+
+SUGGESTION_STATUSES = ("nouvelle", "retenue", "faite", "ecartee")
+
+
+def add_suggestion(user_id: int | None, kind: str, message: str, contact: str, page: str) -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO suggestions (user_id, kind, message, contact, page) VALUES (?, ?, ?, ?, ?)",
+            (user_id, kind, message, contact, page),
+        )
+        return cur.lastrowid
+
+
+def list_suggestions(limit: int = 300) -> list[dict]:
+    """Newest first, with the sender's name and e-mail when they had an account."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT s.id, s.kind, s.message, s.contact, s.page, s.status, s.created_at, "
+            "u.display_name AS user_name, u.email AS user_email "
+            "FROM suggestions s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d["user_email"] and d["user_email"].endswith("@" + NO_EMAIL_DOMAIN):
+            d["user_email"] = None
+        out.append(d)
+    return out
+
+
+def set_suggestion_status(suggestion_id: int, status: str) -> bool:
+    with _conn() as conn:
+        cur = conn.execute("UPDATE suggestions SET status = ? WHERE id = ?", (status, suggestion_id))
+        return cur.rowcount > 0

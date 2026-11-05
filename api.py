@@ -928,6 +928,18 @@ class AnnouncementRequest(BaseModel):
     test: bool = True
 
 
+class SuggestionRequest(BaseModel):
+    kind: str = Field(default="idee", pattern="^(idee|probleme|autre)$")
+    message: str = Field(min_length=10, max_length=2000)
+    contact: str = Field(default="", max_length=200)
+    page: str = Field(default="", max_length=200)
+    site: str = Field(default="", max_length=200)     # left empty by people, filled by spam robots
+
+
+class SuggestionStatus(BaseModel):
+    status: str = Field(pattern="^(nouvelle|retenue|faite|ecartee)$")
+
+
 def _bearer_token(authorization: str | None = Header(default=None)) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
@@ -1311,6 +1323,56 @@ def admin_announce(request: Request, req: AnnouncementRequest, user: dict = Depe
     sent = push_notify.announce(req.title.strip(), req.body.strip(), req.url.strip(),
                                 test_user_id=user["id"] if req.test else None)
     return {"sent": sent, "test": req.test}
+
+
+SUGGESTION_KINDS = {"idee": "Idée", "probleme": "Problème", "autre": "Autre"}
+
+
+def _mail_suggestion(kind: str, message: str, sender: str, page: str) -> None:
+    """Tell the team a reader wrote, in the background: the reader never waits for the mail."""
+    if not (mailer.configured() and ADMIN_EMAILS):
+        return
+    text = (f"{SUGGESTION_KINDS[kind]} de {sender}" + (f", depuis {page}" if page else "") + " :\n\n"
+            f"{message}\n\nToutes les suggestions : {PUBLIC_URL}/#/suggestions")
+    subject = f"Le Kiosque : {SUGGESTION_KINDS[kind].lower()} d'un lecteur"
+    def run():
+        for to in sorted(ADMIN_EMAILS):
+            try:
+                mailer.send(to, subject, text)
+            except Exception:
+                logger.exception("suggestion mail failed")
+    threading.Thread(target=run, daemon=True, name="suggestion-mail").start()
+
+
+@app.post("/suggestions")
+@limiter.limit("5/hour")
+def post_suggestion(request: Request, req: SuggestionRequest, token: str | None = Depends(_bearer_token)):
+    """An idea or a problem from a reader, with or without an account."""
+    if req.site.strip():
+        return {"status": "ok"}             # a robot: answer as if it worked, keep nothing
+    user = auth.get_user_by_token(token) if token else None
+    message = req.message.strip()
+    if len(message) < 10:
+        raise HTTPException(status_code=422, detail="Écrivez au moins quelques mots.")
+    contact = "" if user else req.contact.strip()
+    auth.add_suggestion(user["id"] if user else None, req.kind, message, contact, req.page.strip())
+    sender = (f"{user['display_name']} ({user['email']})" if user and not user["email"].endswith("@" + auth.NO_EMAIL_DOMAIN)
+              else user["display_name"] if user else contact or "un lecteur sans compte")
+    _mail_suggestion(req.kind, message, sender, req.page.strip())
+    return {"status": "ok"}
+
+
+@app.get("/admin/suggestions")
+def admin_suggestions(user: dict = Depends(require_admin)):
+    return {"suggestions": auth.list_suggestions()}
+
+
+@app.put("/admin/suggestions/{suggestion_id}")
+def admin_suggestion_status(req: SuggestionStatus, suggestion_id: int = PathParam(ge=1),
+                            user: dict = Depends(require_admin)):
+    if not auth.set_suggestion_status(suggestion_id, req.status):
+        raise HTTPException(status_code=404, detail="Suggestion introuvable.")
+    return {"status": "ok"}
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

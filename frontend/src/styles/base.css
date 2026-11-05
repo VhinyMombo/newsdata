@@ -110,7 +110,7 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 .k-segmented { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .k-segmented button { min-height: 40px; padding: 0.5rem 1rem; border: 1px solid var(--rule-strong); border-radius: 999px; font-size: 0.86rem; font-weight: 500; color: var(--ink-soft); background: var(--white); }
 .k-segmented button:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
-.k-segmented button.on { background: var(--green); border-color: var(--green); color: var(--on-green); }
+.k-segmented button.on, .k-segmented button.on:hover:not(:disabled) { background: var(--green); border-color: var(--green); color: var(--on-green); }
 .k-segmented.small button { min-height: 32px; padding: 0.3rem 0.8rem; font-size: 0.8rem; }
 
 .k-chips, .k-legend { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -667,6 +667,16 @@ body:has(.k-install) { padding-bottom: 0; background: var(--hero, var(--bg-alt))
 .k-notif-preview p { margin-top: 2px; font-size: 0.88rem; line-height: 1.4; color: var(--ink-soft); }
 .k-diffusion-actions, .k-diffusion-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
 .k-diffusion-confirm p { flex-basis: 100%; font-weight: 500; }
+.k-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.k-suggest-done { max-width: 640px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 16px; background: var(--bg-alt); }
+.k-suggest-inbox { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--rule); max-width: 760px; }
+.k-suggest-inbox .k-segmented { margin-top: 12px; }
+.k-suggest-inbox ul { list-style: none; margin: 16px 0 0; padding: 0; }
+.k-suggest-inbox li { padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.k-suggest-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 0.84rem; }
+.k-suggest-text { margin-top: 6px; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
+.k-suggest-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.k-suggest-actions .k-btn { min-height: 32px; padding: 0.3rem 0.8rem; font-size: 0.84rem; }
 .k-diffusion-ok { margin-top: 12px; color: var(--green); }
 .k-diffusion-history { margin-top: 48px; max-width: 800px; }
 .k-diffusion-history ul { list-style: none; padding: 0; margin: 12px 0 0; }

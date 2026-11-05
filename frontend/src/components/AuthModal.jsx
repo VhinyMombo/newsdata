@@ -434,6 +434,11 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
               )}
             </div>
 
+            <div className="auth-follows">
+              <label className="auth-label">Suggestions</label>
+              <p className="chat-empty-sub">Une idée, un texte qui manque, un problème ? <a href="#/suggestions?depuis=profil" onClick={onClose}>Écrire à l'équipe du Kiosque</a></p>
+            </div>
+
             <button type="button" className="auth-logout" onClick={onLogout}>Se déconnecter</button>
 
             <div className="auth-delete">
