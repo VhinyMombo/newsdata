@@ -455,6 +455,12 @@ a.k-src:hover { text-decoration: underline; }
   .k-front, .k-loading { grid-template-columns: 1fr; }
   .k-grid3, .k-try-grid { grid-template-columns: 1fr; }
   .k-codes-grid { grid-template-columns: 1fr; }
+  /* An open text reads on its own page: no list, no page header above it */
+  .k-codes.reading .k-page-head, .k-codes.reading .k-ask, .k-codes.reading .k-codes-list { display: none; }
+  .k-codes.reading .k-codes-grid { margin-top: 0; padding-top: 0; border-top: 0; }
+}
+@media (min-width: 901px) {
+  .k-codes-all { display: none; }
 }
 
 @media (max-width: 768px) {

@@ -73,8 +73,15 @@ export default function Codes({ codes, ask }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // On a phone the list and the reading pane are stacked: once a text is open,
+  // it reads on its own page (the list is hidden by CSS), from the top
+  const pageKey = `${activeCode || ''}/${activeArticle?.id || ''}`;
+  useEffect(() => {
+    if (activeCode && window.matchMedia('(max-width: 900px)').matches) window.scrollTo({ top: 0 });
+  }, [pageKey, activeCode]);
+
   return (
-    <div className="k-wrap k-page k-codes">
+    <div className={`k-wrap k-page k-codes${activeCode ? ' reading' : ''}`}>
       <header className="k-page-head">
         <span className="k-eyebrow">Codes de loi</span>
         <h1 className="k-title">La loi gabonaise, article par article</h1>
@@ -126,6 +133,7 @@ export default function Codes({ codes, ask }) {
             </article>
           ) : activeCode ? (
             <div className="k-code-tree">
+              <button className="k-back k-codes-all" onClick={() => openCode(null)}><ChevronLeft size={14} /> Tous les textes</button>
               <h3>{codeLabel(activeCode)}</h3>
               {!codeTree ? <Thinking phrases={['Chargement…']} /> : Array.from(codeTree.entries()).map(([titre, chapitres]) => (
                 <details key={titre}>
