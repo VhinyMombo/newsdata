@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, ChevronLeft, ExternalLink, Search } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, ChevronLeft, ChevronRight, ExternalLink, Search } from 'lucide-react';
 import { Thinking } from '../utils/text';
 
 // An article's text: paragraphs, and the tables of finance laws (rates, budget by
@@ -42,8 +42,36 @@ function AskCodes({ ask }) {
 }
 
 export default function Codes({ codes, ask }) {
-  const { codesList, loadList, activeCode, openCode, activeArticle, openArticle, codeTree, codeLabel } = codes;
+  const { codesList, loadList, activeCode, openCode, activeArticle, openArticle, neighbours, codeTree, codeLabel } = codes;
   useEffect(() => { loadList(); }, [loadList]);
+
+  // Previous / next article with the arrow keys, unless the reader is typing
+  const { prev, next } = neighbours;
+  const articleRef = useRef(null);
+  const backToTop = useRef(false);
+  // Open a neighbour; from the bottom of a long article, come back to the top
+  // of the new one once it has loaded (scrolling earlier is undone by the
+  // browser keeping the pager button in place while the text changes)
+  const step = (id) => {
+    const el = articleRef.current;
+    backToTop.current = Boolean(el && el.getBoundingClientRect().top < 80);
+    openArticle(id);
+  };
+  useEffect(() => {
+    if (!backToTop.current || !activeArticle || activeArticle.loading) return;
+    backToTop.current = false;
+    articleRef.current?.scrollIntoView({ block: 'start' });
+  }, [activeArticle]);
+  useEffect(() => {
+    if (!activeArticle) return undefined;
+    const onKey = (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.('input, textarea, select')) return;
+      const to = e.key === 'ArrowLeft' ? prev : e.key === 'ArrowRight' ? next : null;
+      if (to) { e.preventDefault(); step(to.id); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return (
     <div className="k-wrap k-page k-codes">
@@ -74,7 +102,7 @@ export default function Codes({ codes, ask }) {
 
         <section className="k-codes-body" aria-live="polite">
           {activeArticle ? (
-            <article className="k-code-article">
+            <article className="k-code-article" ref={articleRef}>
               <button className="k-back" onClick={() => openArticle(null)}><ChevronLeft size={14} /> {codeLabel(activeCode)}</button>
               {activeArticle.loading ? <Thinking phrases={['Chargement…']} />
                 : !activeArticle.text ? <p className="k-muted">Article introuvable.</p>
@@ -89,6 +117,12 @@ export default function Codes({ codes, ask }) {
                       </div>
                     </>
                   )}
+              {(prev || next) && (
+                <nav className="k-code-pager" aria-label="Articles voisins">
+                  {prev ? <button className="k-btn ghost" onClick={() => step(prev.id)}><ChevronLeft size={14} /> {prev.numero || 'Préambule'}</button> : <span />}
+                  {next ? <button className="k-btn ghost" onClick={() => step(next.id)}>{next.numero || 'Préambule'} <ChevronRight size={14} /></button> : <span />}
+                </nav>
+              )}
             </article>
           ) : activeCode ? (
             <div className="k-code-tree">

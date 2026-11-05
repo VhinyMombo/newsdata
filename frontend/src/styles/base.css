@@ -432,6 +432,8 @@ a.k-src:hover { text-decoration: underline; }
 .k-code-articles button { min-height: 34px; padding: 4px 12px; border: 1px solid var(--rule-strong); border-radius: 999px; font-size: 0.82rem; background: var(--white); }
 .k-code-articles button:hover { border-color: var(--green); color: var(--green); }
 .k-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 16px; font-size: 0.86rem; color: var(--green); }
+.k-code-article { scroll-margin-top: calc(var(--nav-h) + 16px); }
+.k-code-pager { display: flex; justify-content: space-between; gap: 8px; margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--rule); max-width: var(--read); }
 .k-code-article .k-kicker { color: var(--green); margin-bottom: 8px; }
 .k-code-text { white-space: pre-line; font-size: 1.04rem; line-height: 1.8; max-width: var(--read); }
 .k-code-text p + p { margin-top: 0.9em; }

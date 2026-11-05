@@ -59,7 +59,15 @@ export function useCodes() {
     return titres;
   }, [activeCode, codeEntries]);
 
+  // The entries before and after the open article, in the code's own order
+  const neighbours = useMemo(() => {
+    const entries = activeCode ? codeEntries[activeCode] : null;
+    const i = entries && activeArticle ? entries.findIndex(e => e.id === activeArticle.id) : -1;
+    if (i < 0) return { prev: null, next: null };
+    return { prev: entries[i - 1] || null, next: entries[i + 1] || null };
+  }, [activeCode, codeEntries, activeArticle]);
+
   const codeLabel = (code) => codesList?.find(c => c.code === code)?.label || code || '';
 
-  return { codesList, loadList, activeCode, openCode, activeArticle, openArticle, codeTree, codeLabel };
+  return { codesList, loadList, activeCode, openCode, activeArticle, openArticle, neighbours, codeTree, codeLabel };
 }
