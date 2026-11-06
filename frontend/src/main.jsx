@@ -9,12 +9,29 @@ import { resume } from './utils/resume'
 import { countNotificationOpen } from './utils/notifOpen'
 import { countNewspaperClicks } from './utils/outbound'
 import { settleAfterKeyboard } from './utils/keyboard'
+import { isBusy } from './utils/lock'
+
+// A new version takes over a few seconds after the page opens. Reloading onto it
+// then swallowed the reader's first click or the question being typed: reload at
+// once only while the reader has not touched anything yet, otherwise at the next
+// safe moment (page hidden, or a move to another section, with nothing typed).
+let touched = false
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => { touched = true }, { capture: true, once: true })
+const typedSomething = () => [...document.querySelectorAll('input, textarea')].some(el => el.type !== 'hidden' && el.value.trim())
+const safe = () => !isBusy() && !typedSomething()
+function reloadWhenSafe() {
+  if (!touched && !isBusy()) { window.location.reload(); return }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && safe()) window.location.reload() })
+  // Not on the way to the assistant: the question just asked would be lost
+  window.addEventListener('hashchange', () => { if (safe() && !/^#\/assistant/.test(window.location.hash)) window.location.reload() })
+}
 
 // Installed on a phone, the app can stay open in the background for days without
 // a full reload, so a new deploy never reached it: look for a new version each time
 // it comes back to the foreground, and hourly; autoUpdate then reloads onto it.
 registerSW({
   immediate: true,
+  onNeedReload: reloadWhenSafe,
   onRegisteredSW(_url, reg) {
     if (!reg) return
     const check = () => { if (document.visibilityState === 'visible') reg.update() }
