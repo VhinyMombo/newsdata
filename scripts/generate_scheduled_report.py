@@ -21,6 +21,7 @@ the day's first batch of articles is already indexed):
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -29,6 +30,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import api  # noqa: E402  (loads Chroma + Ollama once, same as backfill_categories.py)
 import push_notify  # noqa: E402
 import report_archive  # noqa: E402
+
+
+# A title the model keeps giving the president although it no longer applies
+OUTDATED_TITLE = re.compile(r"(pr[ée]sident)\s+de\s+la\s+transition", re.IGNORECASE)
+ATTEMPTS = 3
+
+
+def write_report(messages, rows) -> str:
+    """The report's text, asked again when it carries the outdated title without any source
+    headline saying so. An unattended run has no reader to catch it, and the edition must
+    still go out: the last attempt loses the title rather than the evening's brief."""
+    if any(OUTDATED_TITLE.search(row[3]) for row in rows):
+        return api._report_llm.invoke(messages).content.strip()
+    for attempt in range(ATTEMPTS):
+        text = api._report_llm.invoke(messages).content.strip()
+        if not OUTDATED_TITLE.search(text):
+            return text
+        print(f"outdated title in attempt {attempt + 1}", flush=True)
+    return OUTDATED_TITLE.sub(r"\1", text)
 
 
 def main():
@@ -49,7 +69,7 @@ def main():
           f"({start.date()} → {now.date()})…", flush=True)
 
     try:
-        text = api._report_llm.invoke(messages).content.strip()
+        text = write_report(messages, rows)
     except Exception as e:
         print(f"[{kind}] LLM generation failed: {e}", file=sys.stderr)
         sys.exit(1)

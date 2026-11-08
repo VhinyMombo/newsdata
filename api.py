@@ -2190,6 +2190,8 @@ pas de formule du type 'Voici la revue'.
 synthétisant les faits marquants, avec les dates.
 - Termine par un court paragraphe de conclusion sur ce que la semaine annonce.
 - Appuie-toi uniquement sur les titres fournis ; n'invente aucun détail.
+- N'attribue à personne une fonction absente des titres fournis, même si tu \
+crois la connaître ; en cas de doute, écris seulement son nom.
 - Français journalistique dense. Vise 500 à 650 mots au total : couvre les \
 faits les plus importants de la semaine sans délayer.
 """
@@ -2282,8 +2284,18 @@ pas de formule du type 'Voici le point'.
 - Sous chaque thème, 2 à 4 puces synthétisant les faits marquants.
 - Termine par une phrase de conclusion sur ce qui est à suivre.
 - Appuie-toi uniquement sur les titres fournis ; n'invente aucun détail.
+- N'attribue à personne une fonction absente des titres fournis, même si tu \
+crois la connaître ; en cas de doute, écris seulement son nom.
 - Français journalistique dense. Vise 250 à 400 mots au total.
 """
+
+
+def _spread_titles(rows: list, limit: int = 300) -> list:
+    """Cap the prompt size without losing part of the period. The rows are sorted by date then
+    source, so evenly spaced ones keep every day and outlet in proportion to its output."""
+    if len(rows) <= limit:
+        return rows
+    return [rows[i * len(rows) // limit] for i in range(limit)]
 
 
 def _weekly_messages(start, now, rows, *, daily: bool = False):
@@ -2299,9 +2311,7 @@ def _weekly_messages(start, now, rows, *, daily: bool = False):
         f"- Rubriques dominantes : "
         + ", ".join(f"{c} ({n})" for c, n in by_category.most_common(5))
     )
-    # Cap the prompt size: keep the most recent titles if the period is very dense
-    MAX_TITLES = 300
-    titles_block = "\n".join(f"{d} | {s} | {t}" for d, s, c, t, _u in rows[-MAX_TITLES:])
+    titles_block = "\n".join(f"{d} | {s} | {t}" for d, s, c, t, _u in _spread_titles(rows))
     messages = [
         SystemMessage(content=get_daily_system(start.date()) if daily else get_weekly_system()),
         HumanMessage(content=(
