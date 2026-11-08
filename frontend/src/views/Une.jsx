@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
 import { API_URL, authHeaders } from '../utils/api';
 import { clock, longDate, sourceLabel } from '../utils/format';
@@ -16,12 +16,20 @@ const anchor = (name) => `theme-${name.normalize('NFD').replace(/[^a-zA-Z]+/g, '
 
 function AskBox({ ask }) {
   const [q, setQ] = useState('');
+  const field = useRef(null);
+  // With a mouse, ready to type on arrival. Not on a phone: the keyboard would cover the page
+  useEffect(() => {
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches && document.activeElement === document.body) {
+      field.current?.focus({ preventScroll: true });
+    }
+  }, []);
   return (
     <div className="k-ask">
-      <form className="k-askbox" onSubmit={(e) => { e.preventDefault(); if (q.trim()) ask(q.trim()); }}>
+      {/* The whole frame reads as the field: the icon and the edges must answer a click too */}
+      <form className="k-askbox" onClick={(e) => { if (!e.target.closest('button')) field.current?.focus(); }} onSubmit={(e) => { e.preventDefault(); if (q.trim()) ask(q.trim()); }}>
         <label htmlFor="une-ask" className="sr-only">Poser une question sur l'actualité gabonaise</label>
         <Search size={20} aria-hidden="true" />
-        <input id="une-ask" value={q} onChange={e => setQ(e.target.value)} placeholder="Posez votre question…" autoComplete="off" enterKeyHint="search" />
+        <input ref={field} id="une-ask" value={q} onChange={e => setQ(e.target.value)} placeholder="Posez votre question…" autoComplete="off" enterKeyHint="search" />
         <button type="submit" className="k-btn primary" disabled={!q.trim()}>Demander</button>
       </form>
       <div className="k-examples">

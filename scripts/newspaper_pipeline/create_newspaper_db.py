@@ -258,7 +258,10 @@ def main() -> None:
     metadatas  = [d.metadata for d in docs]
 
     # Check which IDs already exist in the collection
-    existing = set(collection.get(ids=ids, include=[])['ids'])
+    # In slices: SQLite refuses a query holding more than 32,766 values
+    existing = set()
+    for start in range(0, len(ids), 5000):
+        existing.update(collection.get(ids=ids[start:start + 5000], include=[])['ids'])
     new_docs      = [(id_, text, meta) for id_, text, meta in zip(ids, texts, metadatas) if id_ not in existing]
 
     if not new_docs:

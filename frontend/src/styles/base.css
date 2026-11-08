@@ -213,7 +213,7 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 /* ── À la une ─────────────────────────────────────────────── */
 .k-hero-band { padding-block: clamp(40px, 7vw, 88px) clamp(32px, 5vw, 56px); border-bottom: 1px solid var(--rule); }
 .k-ask { margin-top: clamp(24px, 3.5vw, 36px); display: grid; gap: 14px; max-width: 780px; }
-.k-askbox { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 18px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--white); transition: border-color 0.2s, box-shadow 0.2s; }
+.k-askbox { cursor: text; display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 18px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--white); transition: border-color 0.2s, box-shadow 0.2s; }
 .k-askbox:focus-within { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-soft); }
 .k-askbox > svg { color: var(--muted); flex-shrink: 0; }
 .k-askbox input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 1.08rem; padding: 12px 0; }
