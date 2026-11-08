@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, BellOff, Flame, Search, Sparkles, Star } from 'lucide-react';
 import { API_URL, authHeaders } from '../utils/api';
-import { clock, longDate, sourceLabel } from '../utils/format';
+import { dated, longDate, shortDate, sourceLabel } from '../utils/format';
 import { explain } from '../utils/explain';
 import Story from '../components/Story';
 import { computeFollowDeltas } from '../utils/categories';
@@ -92,7 +92,8 @@ export default function Une({ ask, session, corpus, health, reports }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchToday(); }, []);
 
-  const isToday = today && today.date === (today.gabon_today || health.gabonToday);
+  const day = today?.gabon_today || health.gabonToday;
+  const isToday = today && today.date === day;
   const edition = today ? `${isToday ? 'Édition du' : 'Dernière collecte :'} ${longDate(today.date)}` : 'Presse gabonaise';
   const [lead, ...rest] = today?.themes || [];
   // Topics with a single article, or no real topic, read better as one short list
@@ -105,10 +106,10 @@ export default function Une({ ask, session, corpus, health, reports }) {
       <section className="k-hero-band">
         <div className="k-wrap">
           <span className="k-eyebrow">{edition}</span>
-          <h1 className="k-display">Ce que dit la presse gabonaise, <em>aujourd'hui</em></h1>
+          <h1 className="k-display">Ce que dit la presse gabonaise, <em>{today && !isToday ? `le ${shortDate(today.date)}` : "aujourd'hui"}</em></h1>
           <p className="k-dek">
             {today
-              ? `${today.count} articles de la presse gabonaise ${isToday ? 'depuis ce matin' : 'ce jour-là'}, mis à jour toutes les heures.`
+              ? (isToday ? `${today.count} articles de la presse gabonaise depuis ce matin, mis à jour toutes les heures.` : `${today.count} articles de la presse gabonaise ce jour-là.`)
               : 'Les articles de la presse gabonaise, mis à jour toutes les heures.'}
             {' '}Parcourez l'essentiel ou posez une question : chaque réponse cite les articles d'où elle vient.
           </p>
@@ -139,13 +140,13 @@ export default function Une({ ask, session, corpus, health, reports }) {
             <div className="k-front">
               <section className="k-lead" id={anchor(lead.name)} aria-labelledby="une-lead">
                 <span className="k-eyebrow" id="une-lead">À la une · {lead.name}</span>
-                <Story ask={ask} a={lead.articles[0]} size="xl" />
+                <Story ask={ask} day={day}a={lead.articles[0]} size="xl" />
                 <div className="k-grid3">
-                  {lead.articles.slice(1, 4).map(a => <Story ask={ask} key={a.url} a={a} size="s" lede={false} />)}
+                  {lead.articles.slice(1, 4).map(a => <Story ask={ask} day={day}key={a.url} a={a} size="s" lede={false} />)}
                 </div>
                 {lead.articles.length > 4 && (
                   <ul className="k-list" aria-label={`Aussi en ${lead.name}`}>
-                    {lead.articles.slice(4).map(a => <li key={a.url}><Story ask={ask} a={a} size="xs" lede={false} /></li>)}
+                    {lead.articles.slice(4).map(a => <li key={a.url}><Story ask={ask} day={day}a={a} size="xs" lede={false} /></li>)}
                   </ul>
                 )}
                 <button className="k-btn" onClick={() => ask(`Que disent les articles récents sur le thème ${lead.name} ?`)}>
@@ -167,7 +168,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                     {today.latest.slice(0, 8).map(a => (
                       <li key={a.url}>
                         <a className="k-wire-ask" href="#/assistant" onClick={explain(ask, a)}>
-                          <time>{clock(a.time) || '—'}</time>
+                          <time>{dated(a.time, day) || '—'}</time>
                           <span>{a.title}</span>
                         </a>
                         {/* As on the cards: the title and "Expliquer" open the assistant, "Lire l'article" the newspaper's site */}
@@ -206,9 +207,9 @@ export default function Une({ ask, session, corpus, health, reports }) {
                     <h2 id={`sec-${anchor(t.name)}`}>{t.name}</h2>
                     <span className="k-muted">{t.count} article{t.count > 1 ? 's' : ''}</span>
                   </header>
-                  <Story ask={ask} a={t.articles[0]} size="m" />
+                  <Story ask={ask} day={day}a={t.articles[0]} size="m" />
                   <ul className="k-list">
-                    {t.articles.slice(1).map(a => <li key={a.url}><Story ask={ask} a={a} size="xs" lede={false} /></li>)}
+                    {t.articles.slice(1).map(a => <li key={a.url}><Story ask={ask} day={day}a={a} size="xs" lede={false} /></li>)}
                   </ul>
                   <button className="k-textlink" onClick={() => ask(`Que disent les articles récents sur le thème ${t.name} ?`)}>
                     Résumer avec l'assistant <ArrowRight size={14} />
@@ -223,7 +224,7 @@ export default function Une({ ask, session, corpus, health, reports }) {
                   </header>
                   <ul className="k-list">
                     {brief.slice(0, 10).map(a => (
-                      <li key={a.url}>{!GENERIC_THEMES.has(a.theme) && <span className="k-label k-brief-theme">{a.theme}</span>}<Story ask={ask} a={a} size="xs" lede={false} /></li>
+                      <li key={a.url}>{!GENERIC_THEMES.has(a.theme) && <span className="k-label k-brief-theme">{a.theme}</span>}<Story ask={ask} day={day}a={a} size="xs" lede={false} /></li>
                     ))}
                   </ul>
                 </section>

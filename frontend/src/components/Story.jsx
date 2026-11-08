@@ -1,11 +1,11 @@
 import { ArrowUpRight, Sparkles } from 'lucide-react';
-import { clock, sourceLabel } from '../utils/format';
+import { dated, sourceLabel } from '../utils/format';
 import { explain } from '../utils/explain';
 
 // An article: the whole card and its "Expliquer" button open the assistant, and
 // "Lire l'article" opens the original on the newspaper's site
-export default function Story({ a, ask, size = 'm', lede = true }) {
-  const t = clock(a.time);
+export default function Story({ a, ask, size = 'm', lede = true, day = null }) {
+  const t = dated(a.time, day);
   return (
     <article className={`k-story k-story-${size}`}>
       <a className="k-story-ask" href="#/assistant" onClick={explain(ask, a)}>

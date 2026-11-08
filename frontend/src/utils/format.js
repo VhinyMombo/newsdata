@@ -36,6 +36,16 @@ export const clock = (ts) => {
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', ' h ');
 };
 
+// The time alone for an article of the given Gabon day; from any other day the date
+// comes first, or "20 h 53" on an old front page reads as a time still to come
+export const dated = (ts, today) => {
+  const time = clock(ts);
+  if (!time || !today) return time;
+  const d = new Date(/(Z|[+-]\d\d:?\d\d)$/.test(ts) ? ts : `${ts}+01:00`);
+  if (Number.isNaN(d.getTime()) || d.toLocaleDateString('en-CA', { timeZone: 'Africa/Libreville' }) === today) return time;
+  return `${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', timeZone: 'Africa/Libreville' })}, ${time}`;
+};
+
 // The opening sentence of an edition or an answer, without its markdown or its [n]
 // citations, cut on a word if too long; a heading standing alone above the first
 // paragraph is skipped (the same cut as the evening notification, push_notify.brief_body)
