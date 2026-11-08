@@ -12,6 +12,18 @@
 	}
 }
 
+# The private rehearsal copy (deploy/staging.sh): nginx there asks for the password.
+# A 502 here while it is stopped, without any effect on the live site.
+staging.lekiosque.hodologic.fr {
+	encode zstd gzip
+	header X-Robots-Tag "noindex, nofollow"
+
+	reverse_proxy staging-web:80 {
+		flush_interval -1
+		header_up -Cf-Connecting-Ip
+	}
+}
+
 # Umami, the visitor statistics
 {$STATS_DOMAIN} {
 	encode zstd gzip

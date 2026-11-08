@@ -2081,7 +2081,6 @@ def answer(request: Request, req: AnswerRequest):
 # the answer in the app (#/r/<id>).
 
 EXPLAIN_PREFIX = "Que dit cet article et dans quel contexte"   # frontend utils/explain.js
-PUBLIC_URL = "https://lekiosque.hodologic.fr"
 
 
 def _opening(text: str, n: int = 220) -> str:

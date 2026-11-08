@@ -1,0 +1,63 @@
+# Le Kiosque — private rehearsal copy, https://staging.lekiosque.hodologic.fr
+# Driven by deploy/staging.sh, which sets the project name and directory
+# (~/lekiosque-staging on the server). Started for a test, stopped afterwards.
+#
+# Isolation from the live site:
+# - Its services are named staging-api and staging-web, never api or web: on the shared
+#   network, the live nginx resolves "api" and must only ever find the live API.
+# - Its own accounts database, and a copy of the articles.
+# - .env.staging holds only the LLM and Google sign-in keys. No SMTP password and no
+#   VAPID keys, so it cannot send mail or notifications; no cron runs here.
+# - Memory and CPU are capped, so a runaway copy cannot take the live site down.
+
+name: lekiosque-staging
+
+services:
+  staging-api:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    image: lekiosque-api:staging
+    env_file: .env.staging
+    environment:
+      PUBLIC_URL: https://staging.lekiosque.hodologic.fr
+      # The live embedding service, for searches only
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_EMBED_MODEL: embeddinggemma
+      AUTH_DB_PATH: /data/auth.db
+      REPORTS_DB_PATH: /data/reports_archive.db
+      TZ: Africa/Libreville
+    volumes:
+      - ./newspaper_chroma_db:/app/newspaper_chroma_db
+      - ./codes_chroma_db:/app/codes_chroma_db
+      - ./data:/data
+    mem_limit: 1400m
+    cpus: 1.0
+    networks: [shared]
+
+  staging-web:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    image: lekiosque-web:staging
+    volumes:
+      - ./data.json:/usr/share/nginx/html/data.json:ro
+      # Password and the visible STAGING mark: see staging.sh
+      - ./nginx.conf:/etc/nginx/conf.d/kiosque.conf:ro
+      - ./htpasswd:/etc/nginx/htpasswd:ro
+    # The image's check calls the page without the password
+    healthcheck:
+      disable: true
+    mem_limit: 128m
+    cpus: 0.5
+    depends_on:
+      - staging-api
+    networks: [shared]
+
+networks:
+  # Caddy reaches staging-web here, and staging-api reaches Ollama
+  shared:
+    external: true
+    name: lekiosque_default
