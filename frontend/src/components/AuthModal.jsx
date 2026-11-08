@@ -31,9 +31,27 @@ function FacebookMark() {
 }
 
 /** "Continuer avec Google / Facebook": the browser goes to the provider's page and comes back signed in. */
-function ProviderButtons({ providers, onInApp, busy }) {
+function ProviderButtons({ providers, onInApp, busy, appCode }) {
+  const [code, setCode] = useState('');
   const shown = providers.filter(p => !(p === 'google' && IN_APP));
   if (!shown.length) return null;
+  // Back from the provider's sheet: the code it shows proves who signed in there
+  if (appCode.asked) {
+    const send = () => { if (code.trim()) appCode.confirm(code); };
+    return (
+      <div className="auth-providers">
+        <label className="auth-label" htmlFor="auth-app-code">Saisissez le code affiché dans la fenêtre de connexion</label>
+        <input
+          id="auth-app-code" className="auth-input" value={code} inputMode="numeric" autoComplete="one-time-code"
+          maxLength={7} placeholder="000 000" onChange={e => setCode(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send(); } }}
+        />
+        <button type="button" className="auth-submit" onClick={send} disabled={busy || !code.trim()}>{busy ? '…' : 'Valider'}</button>
+        {appCode.error && <p className="auth-error" role="alert">{appCode.error}</p>}
+        <button type="button" className="auth-switch" onClick={appCode.cancel}>Annuler</button>
+      </div>
+    );
+  }
   // From the home-screen app: open the provider in a sheet and wait (see useSession)
   const click = (provider) => (e) => { if (isStandalone()) { e.preventDefault(); onInApp(provider); } };
   return (
@@ -70,7 +88,7 @@ const EDITION_PREFS = [
   ['weekly_review', 'La revue de la semaine', 'Chaque vendredi à 18h, les grands sujets des sept derniers jours.'],
 ];
 
-export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount, onProviderInApp }) {
+export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount, onProviderInApp, appCode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -318,7 +336,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                 <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
                 <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
               </ul>
-              <ProviderButtons providers={providers} onInApp={onProviderInApp} busy={busy} />
+              <ProviderButtons providers={providers} onInApp={onProviderInApp} busy={busy} appCode={{ ...appCode, error }} />
               {mode === 'register' && (
                 <input
                   className="auth-input" placeholder="Nom affiché" value={displayName}
@@ -335,7 +353,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
               />
             </>)}
-            {error && <p className="auth-error">{error}</p>}
+            {error && !appCode?.asked && <p className="auth-error">{error}</p>}
             {!(mode === 'forgot' && forgotSent) && (
               <button type="submit" className="auth-submit" disabled={busy}>
                 {busy ? '…' : mode === 'register' ? 'Créer le compte' : mode === 'forgot' ? 'Recevoir le lien' : mode === 'reset' ? 'Enregistrer et me connecter' : 'Se connecter'}

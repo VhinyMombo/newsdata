@@ -101,14 +101,20 @@ export function useSession() {
 
   // Installed on a phone, Google or Facebook opens in a browser sheet over the app and
   // would come back signed in there, not here. The app keeps a secret, sends it along,
-  // and asks the server every two seconds until the sheet has finished.
+  // and asks the server every two seconds until the sheet has finished. The sheet then
+  // shows a code to type here: the secret alone never gives a session, since a link
+  // sent by someone else could carry their secret.
   const waitRef = useRef(null);
+  const appSecret = useRef(null);
+  const [appCodeAsked, setAppCodeAsked] = useState(false);
   const signInFromApp = useCallback((provider) => {
     const bytes = crypto.getRandomValues(new Uint8Array(24));
     const secret = btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, c => ({ '+': '-', '/': '_', '=': '' }[c]));
     // Kept for the end page in case iPhone brings it back inside the app (see api.py _sheet_page)
     try { localStorage.setItem('lekiosque_app_wait', secret); } catch { /* private mode: the waiting below still works */ }
     window.open(`${API_URL}/auth/${provider}/start?app=${secret}`, '_blank');
+    appSecret.current = secret;
+    setAppCodeAsked(false);
     clearInterval(waitRef.current);
     setAuthError('');
     setAuthBusy(true);
@@ -121,13 +127,14 @@ export function useSession() {
         if (body.status === 'pending') return;
         clearInterval(waitRef.current);
         setAuthBusy(false);
+        if (body.status === 'confirm') {
+          setAuthError('');
+          setAppCodeAsked(true);
+          setAuthModal('login');
+          return;
+        }
         try { localStorage.removeItem('lekiosque_app_wait'); } catch { /* nothing kept */ }
-        if (body.status === 'ok') {
-          localStorage.setItem(TOKEN_KEY, body.token);
-          setAuthToken(body.token);
-          setUser(body.user);
-          setAuthModal(null);
-        } else if (body.status === 'error') {
+        if (body.status === 'error') {
           setAuthError(body.message);
           setAuthModal('login');
         }
@@ -135,6 +142,36 @@ export function useSession() {
     }, 2000);
   }, []);
   useEffect(() => () => clearInterval(waitRef.current), []);
+
+  const confirmAppCode = useCallback(async (code) => {
+    setAuthBusy(true);
+    setAuthError('');
+    try {
+      const res = await fetch(`${API_URL}/auth/app-confirm`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app: appSecret.current, code }),
+      });
+      if (!res.ok) throw new Error();
+      const body = await res.json();
+      if (body.status === 'wrong') { setAuthError('Ce code ne correspond pas. Vérifiez-le et réessayez.'); return; }
+      setAppCodeAsked(false);
+      try { localStorage.removeItem('lekiosque_app_wait'); } catch { /* nothing kept */ }
+      if (body.status !== 'ok') { setAuthError('La connexion a expiré. Recommencez.'); return; }
+      localStorage.setItem(TOKEN_KEY, body.token);
+      setAuthToken(body.token);
+      setUser(body.user);
+      setAuthModal(null);
+    } catch {
+      setAuthError("Le code n'a pas pu être vérifié. Réessayez dans un instant.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }, []);
+  const cancelAppCode = useCallback(() => {
+    setAppCodeAsked(false);
+    setAuthError('');
+    try { localStorage.removeItem('lekiosque_app_wait'); } catch { /* nothing kept */ }
+  }, []);
 
   const showAuthError = useCallback((message) => { setAuthError(message); setAuthModal('login'); }, []);
 
@@ -161,5 +198,5 @@ export function useSession() {
 
   const openAuth = useCallback((mode) => { setAuthError(''); setAuthModal(mode); }, []);
 
-  return { authToken, user, setUser, authModal, setAuthModal, openAuth, authBusy, authError, submit, logout, forgot, resetToken, openReset, providers, exchange, showAuthError, deleteAccount, signInFromApp };
+  return { authToken, user, setUser, authModal, setAuthModal, openAuth, authBusy, authError, submit, logout, forgot, resetToken, openReset, providers, exchange, showAuthError, deleteAccount, signInFromApp, appCodeAsked, confirmAppCode, cancelAppCode };
 }

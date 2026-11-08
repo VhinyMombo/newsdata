@@ -928,6 +928,11 @@ class AnnouncementRequest(BaseModel):
     test: bool = True
 
 
+class AppConfirmRequest(BaseModel):
+    app: str = Field(min_length=20, max_length=100)
+    code: str = Field(min_length=1, max_length=12)
+
+
 class SuggestionRequest(BaseModel):
     kind: str = Field(default="idee", pattern="^(idee|probleme|autre)$")
     message: str = Field(min_length=10, max_length=2000)
@@ -958,7 +963,8 @@ ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split("
 
 
 def is_admin(user: dict) -> bool:
-    return bool(user.get("email")) and user["email"].lower() in ADMIN_EMAILS
+    # A proven address only: anyone can sign up with an address they do not own
+    return bool(user.get("email_verified") and user.get("email")) and user["email"].lower() in ADMIN_EMAILS
 
 
 def require_admin(user: dict = Depends(require_user)) -> dict:
@@ -1045,6 +1051,7 @@ def reset_password(request: Request, req: ResetPasswordRequest):
 # (#/connexion?code=…) that the app trades for a session at /auth/exchange.
 
 _PROVIDER = PathParam(pattern="^(google|facebook)$")
+_OAUTH_COOKIE = "kiosque_oauth"
 
 
 def _oauth_redirect_uri(provider: str) -> str:
@@ -1065,11 +1072,38 @@ def auth_providers(test: str = ""):
     return {"providers": shown}
 
 
-def _sheet_page(title: str, text: str) -> HTMLResponse:
+def _sheet_page(title: str, text: str, code: str | None = None) -> HTMLResponse:
     """The end of a sign-in started from the installed app. In a browser sheet over
-    the app, the app underneath has the result and the reader closes the sheet. When
-    iPhone brings the page back inside the app itself, the page finds the app's
-    secret in storage, collects the session and returns to the front page."""
+    the app, the page shows a code to type in the app: whoever sent a sign-in link
+    may hold the app's secret, but only the person who signed in sees this code.
+    When iPhone brings the page back inside the app itself, the page finds the app's
+    secret in storage: that proves it is the same app, so it finishes by itself."""
+    if code:
+        close = f"""<p aria-label="Code {' '.join(code)}" style="margin:24px 0 8px;font:600 2.2rem/1.2 system-ui,sans-serif;letter-spacing:.12em;color:#0F2A3A">{code[:3]} {code[3:]}</p>
+<p id="close" style="margin-top:12px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche, puis saisissez ce code dans l'app.</p>
+<p style="margin-top:24px;font-size:15px;color:#34495A">Ne le donnez à personne, même à quelqu'un qui se dit du Kiosque. Si vous n'avez pas lancé cette connexion depuis votre app Le Kiosque, fermez simplement cette page.</p>"""
+        script = f"""(function () {{
+  var secret; try {{ secret = localStorage.getItem('lekiosque_app_wait'); }} catch (e) {{}}
+  if (!secret) return;
+  fetch('/api/auth/app-confirm', {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify({{ app: secret, code: '{code}' }}) }})
+    .then(function (r) {{ return r.json(); }}).then(function (b) {{
+      if (b.status !== 'ok') return;   // another sign-in's secret: the code stays on screen
+      localStorage.setItem('lekiosque_auth_token', b.token);
+      localStorage.removeItem('lekiosque_app_wait');
+      location.replace('/');
+    }}).catch(function () {{}});
+}})();"""
+    else:
+        close = """<p id="close" style="margin-top:28px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche pour revenir au Kiosque.</p>"""
+        script = """(function () {
+  var secret; try { secret = localStorage.getItem('lekiosque_app_wait'); } catch (e) {}
+  if (!secret) return;
+  document.getElementById('close').textContent = 'Retour au Kiosque…';
+  fetch('/api/auth/app-wait?app=' + encodeURIComponent(secret)).catch(function () {}).then(function () {
+    try { localStorage.removeItem('lekiosque_app_wait'); } catch (e) {}
+    location.replace('/');
+  });
+})();"""
     return HTMLResponse(f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{title} · Le Kiosque</title></head>
 <body style="margin:0;font:17px/1.55 Georgia,serif;color:#0F2A3A;background:#fff">
@@ -1077,22 +1111,10 @@ def _sheet_page(title: str, text: str) -> HTMLResponse:
 <img src="/icons/icon-192.png" width="64" height="64" alt="" style="border-radius:14px">
 <h1 style="font-weight:400;font-size:1.6rem;margin:20px 0 10px">{title}</h1>
 <p style="color:#34495A">{text}</p>
-<p id="close" style="margin-top:28px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche pour revenir au Kiosque.</p>
+{close}
 <p><a href="/" style="display:inline-block;margin-top:8px;padding:12px 20px;border-radius:10px;background:#7A1F2B;color:#fff;text-decoration:none;font:600 15px/1 system-ui,sans-serif">Revenir au Kiosque</a></p>
 </main>
-<script>
-(function () {{
-  var secret; try {{ secret = localStorage.getItem('lekiosque_app_wait'); }} catch (e) {{}}
-  if (!secret) return;
-  document.getElementById('close').textContent = 'Retour au Kiosque…';
-  fetch('/api/auth/app-wait?app=' + encodeURIComponent(secret)).then(function (r) {{ return r.json(); }}).then(function (b) {{
-    if (b.status === 'ok') localStorage.setItem('lekiosque_auth_token', b.token);
-  }}).catch(function () {{}}).then(function () {{
-    try {{ localStorage.removeItem('lekiosque_app_wait'); }} catch (e) {{}}
-    location.replace('/');
-  }});
-}})();
-</script></body></html>""")
+<script>{script}</script></body></html>""", headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 @app.get("/auth/{provider}/start")
@@ -1100,14 +1122,23 @@ def _sheet_page(title: str, text: str) -> HTMLResponse:
 def oauth_start(request: Request, provider: str = _PROVIDER, app_wait: str = Query(default="", alias="app", max_length=100)):
     if provider not in oauth.configured():
         raise HTTPException(status_code=404, detail="Connexion indisponible.")
-    state = auth.create_oauth_state(provider, app_wait if len(app_wait) >= 20 else None)
-    return RedirectResponse(oauth.authorize_url(provider, _oauth_redirect_uri(provider), state), status_code=303)
+    in_app = len(app_wait) >= 20
+    # In a browser, the way back must reach the browser that left. The installed app's
+    # sheet is another browser: there the code shown at the end does that job.
+    browser = None if in_app else secrets.token_urlsafe(32)
+    state = auth.create_oauth_state(provider, app_wait if in_app else None, browser)
+    res = RedirectResponse(oauth.authorize_url(provider, _oauth_redirect_uri(provider), state), status_code=303)
+    if browser:
+        res.set_cookie(_OAUTH_COOKIE, browser, max_age=auth.OAUTH_STATE_TTL_MINUTES * 60, path="/", httponly=True,
+                       secure=PUBLIC_URL.startswith("https://"), samesite="lax")
+    return res
 
 
 @app.get("/auth/{provider}/callback")
 @limiter.limit("20/minute")
 def oauth_callback(request: Request, provider: str = _PROVIDER, code: str = "", state: str = "", error: str = ""):
-    valid, app_hash = auth.consume_oauth_state(state, provider) if provider in oauth.configured() else (False, None)
+    valid, app_hash = (auth.consume_oauth_state(state, provider, request.cookies.get(_OAUTH_COOKIE))
+                       if provider in oauth.configured() else (False, None))
     if not valid:
         return _back_to_app(erreur="expire")
 
@@ -1129,8 +1160,8 @@ def oauth_callback(request: Request, provider: str = _PROVIDER, code: str = "", 
         logger.exception("%s sign-in failed", provider)
         return fail("fournisseur", "Le service de connexion n'a pas répondu. Réessayez dans un instant.")
     if app_hash:
-        auth.finish_app_login(app_hash, user_id=user_id)
-        return _sheet_page("Vous êtes connecté", "Le Kiosque vous a reconnu.")
+        code = auth.finish_app_login(app_hash, user_id=user_id)
+        return _sheet_page("Encore une étape", "Voici votre code de connexion au Kiosque :", code)
     return _back_to_app(code=auth.create_login_code(user_id))
 
 
@@ -1138,6 +1169,12 @@ def oauth_callback(request: Request, provider: str = _PROVIDER, code: str = "", 
 @limiter.limit("60/minute")
 def oauth_app_wait(request: Request, app_wait: str = Query(alias="app", min_length=20, max_length=100)):
     return auth.app_login_result(app_wait)
+
+
+@app.post("/auth/app-confirm")
+@limiter.limit("20/minute")
+def oauth_app_confirm(request: Request, req: AppConfirmRequest):
+    return auth.confirm_app_login(req.app, req.code)
 
 
 @app.post("/auth/exchange")

@@ -112,6 +112,7 @@ export default function App() {
           providers={session.providers}
           onDeleteAccount={session.deleteAccount}
           onProviderInApp={session.signInFromApp}
+          appCode={{ asked: session.appCodeAsked, confirm: session.confirmAppCode, cancel: session.cancelAppCode }}
         />
       )}
 
