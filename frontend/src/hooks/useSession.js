@@ -119,12 +119,28 @@ export function useSession() {
     setAuthError('');
     setAuthBusy(true);
     const until = Date.now() + 10 * 60 * 1000;
+    let expiredSeen = 0;
+    // Where the sheet shares this app's storage it finishes by itself (api.py _sheet_page)
+    // and leaves the session there: this window, still open underneath, takes it up
+    const finishedInSheet = () => {
+      let stored = null;
+      try { stored = localStorage.getItem(TOKEN_KEY); } catch { /* no storage: the code is the way */ }
+      if (!stored) return false;
+      clearInterval(waitRef.current);
+      setAuthBusy(false);
+      setAuthToken(stored);
+      setAuthModal(null);
+      return true;
+    };
     waitRef.current = setInterval(async () => {
       if (Date.now() > until) { clearInterval(waitRef.current); setAuthBusy(false); return; }
+      if (finishedInSheet()) return;
       try {
         const res = await fetch(`${API_URL}/auth/app-wait?app=${secret}`);
         const body = await res.json();
         if (body.status === 'pending') return;
+        // Gone because the sheet just took the session: its token lands a moment later
+        if (body.status === 'expired' && ++expiredSeen < 3) return;
         clearInterval(waitRef.current);
         setAuthBusy(false);
         if (body.status === 'confirm') {

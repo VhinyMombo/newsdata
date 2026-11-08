@@ -1085,13 +1085,17 @@ def _sheet_page(title: str, text: str, code: str | None = None) -> HTMLResponse:
         script = f"""(function () {{
   var secret; try {{ secret = localStorage.getItem('lekiosque_app_wait'); }} catch (e) {{}}
   if (!secret) return;
+  // Probably finishing by itself: the code shows only if it does not
+  var page = document.documentElement, show = function () {{ page.style.visibility = ''; }};
+  page.style.visibility = 'hidden';
+  setTimeout(show, 3000);
   fetch('/api/auth/app-confirm', {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify({{ app: secret, code: '{code}' }}) }})
     .then(function (r) {{ return r.json(); }}).then(function (b) {{
-      if (b.status !== 'ok') return;   // another sign-in's secret: the code stays on screen
+      if (b.status !== 'ok') return show();   // another sign-in's secret: the code is what counts
       localStorage.setItem('lekiosque_auth_token', b.token);
       localStorage.removeItem('lekiosque_app_wait');
       location.replace('/');
-    }}).catch(function () {{}});
+    }}).catch(show);
 }})();"""
     else:
         close = """<p id="close" style="margin-top:28px;font:600 15px/1.4 system-ui,sans-serif;color:#7A1F2B">Touchez ✕ en haut à gauche pour revenir au Kiosque.</p>"""
