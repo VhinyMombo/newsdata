@@ -652,11 +652,21 @@ def build_rag_prompt(question: str, articles: list["ContextArticle"]) -> str:
         context_blocks.append(block)
 
     context = "\n\n---------------------\n\n".join(context_blocks)
+    # « Expliquer » under an article: the reader's article is [1] (useChat puts it first).
+    # The rule for a question no article covers made the model open with "no article
+    # deals precisely with it" before explaining that very article.
+    explain_rule = (
+        "- Cette question porte sur l'article [1], que le lecteur vient d'ouvrir : commence "
+        "directement par ce qu'il dit, puis replace-le dans son contexte avec les autres "
+        "articles. N'écris jamais qu'aucun article ne traite la question.\n"
+        if question.startswith(EXPLAIN_PREFIX) else ""
+    )
 
     return (
         f"Question : {question}\n\n"
 
         "RÈGLES STRICTES :\n"
+        f"{explain_rule}"
         "- Réponds uniquement au sujet exact de cette question (la bonne personne, "
         "le bon lieu, le bon événement). Ne réponds jamais sur un autre sujet, même proche.\n"
         "- Utilise uniquement les informations présentes dans les articles.\n"
