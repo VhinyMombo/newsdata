@@ -53,10 +53,24 @@ function SinceLastVisit({ session, corpus, ask }) {
       .catch(() => setFollows([]));
   }, [user, authToken]);
   const active = useMemo(() => (user ? follows : []), [user, follows]);
-  const { load, data, dateMax } = corpus;
-  useEffect(() => { if (active.length) load(); }, [active.length, load]);
+  // Corpus already in memory (Tendances was opened): reuse it. Otherwise a worker reads it
+  // beside the page, which then stays responsive (see followDeltas.worker.js)
+  const { data, dateMax: loadedMax } = corpus;
+  const [fromWorker, setFromWorker] = useState(null);
+  useEffect(() => {
+    if (!active.length || data) return undefined;
+    const worker = new Worker(new URL('../workers/followDeltas.worker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = ({ data: result }) => { if (!result.error) setFromWorker(result); worker.terminate(); };
+    worker.onerror = () => worker.terminate();
+    worker.postMessage({ follows: active, lastSeen });
+    return () => worker.terminate();
+  }, [active, lastSeen, data]);
+  const dateMax = loadedMax || fromWorker?.dateMax;
   useEffect(() => { if (dateMax) localStorage.setItem(LANDING_LAST_VISIT_KEY, dateMax); }, [dateMax]);
-  const deltas = useMemo(() => computeFollowDeltas(data?.points, active, lastSeen, dateMax), [data, active, lastSeen, dateMax]);
+  const deltas = useMemo(
+    () => (data ? computeFollowDeltas(data.points, active, lastSeen, loadedMax) : fromWorker?.deltas || []),
+    [data, active, lastSeen, loadedMax, fromWorker],
+  );
 
   if (!user) return null;
   if (!active.length) {
