@@ -35,13 +35,15 @@ export default function App() {
   const codes = useCodes();
   const corpus = useCorpusData();
 
-  // Any view can hand a question to the assistant, in either corpus. A clicked
-  // article (pinned) opens a conversation of its own.
+  // Any view can hand a question to the assistant, in either corpus. It always opens a
+  // conversation of its own: asked from the front page, a chip or a clicked article, it
+  // must not land under an earlier conversation, nor take it as context. Follow-ups are
+  // typed in the assistant itself, which continues the open conversation.
   const { switchCorpus, runSearch } = chat;
   const ask = useCallback((q, target = 'presse', pinned = null) => {
     switchCorpus(target);
     go('assistant');
-    runSearch(q, null, target, pinned, !!pinned);
+    runSearch(q, null, target, pinned, true);
   }, [switchCorpus, runSearch]);
 
   // The password reset link lands here: open the window, then clean the token out of the address bar
