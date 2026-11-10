@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-// data.json is the ~20 MB corpus export behind the map and the statistics. Loaded on
+// data.json is the corpus export behind the map and the statistics (about 4 MB to
+// download, five times more once decoded). Loaded on
 // demand only, so the front page and the assistant never wait for it.
 export function useCorpusData() {
   const [data, setData] = useState(null);

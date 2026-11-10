@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Extract embeddings from ChromaDB, calculate UMAP & PCA 2D/3D projections,
+Extract embeddings from ChromaDB, calculate UMAP 2D/3D projections,
 and export the results to a JSON file for the React frontend to consume.
 
 Usage:
@@ -18,7 +18,6 @@ import os
 import numpy as np
 import chromadb
 import umap
-from sklearn.decomposition import PCA
 from sklearn.cluster import HDBSCAN
 from langchain_core.messages import SystemMessage, HumanMessage
 import sys
@@ -124,11 +123,10 @@ def name_in_groups(namer, clusters, sample_titles, cluster_names) -> None:
 K_NEIGHBOURS = 10
 
 
-def make_point(id_, meta, doc, cluster_name, projections) -> dict:
-    # Format document snippet for hover tooltips
-    doc_snippet = "<br>".join(doc[j:j+80] for j in range(0, min(len(doc), 400), 80))
-    if len(doc) > 400:
-        doc_snippet += "..."
+def make_point(id_, meta, cluster_name, projections) -> dict:
+    # Only what the site reads: Tendances and every reader with a followed topic download
+    # and decode this file, and it had grown to 38 MB with text extracts and PCA projections
+    # nothing displays, and 17-digit coordinates. Four decimals stay finer than a map's pixel.
     return {
         "id": id_,
         "title": meta.get("title", ""),
@@ -137,8 +135,7 @@ def make_point(id_, meta, doc, cluster_name, projections) -> dict:
         "source": meta.get("source", "unknown"),
         "cluster_name": cluster_name,
         "url": meta.get("source_url", ""),
-        "snippet": doc_snippet,
-        "projections": projections,
+        "projections": {k: [round(float(v), 4) for v in c] for k, c in projections.items() if k.startswith("UMAP_")},
     }
 
 
@@ -174,7 +171,7 @@ def append_new(data) -> bool:
         theme = Counter(p["cluster_name"] for p in pts).most_common(1)[0][0]
         projections = {k: [float(v) for v in np.mean([p["projections"][k] for p in pts], axis=0)]
                        for k in pts[0]["projections"]}
-        export_data["points"].append(make_point(data["ids"][i], data["metadatas"][i], data["documents"][i], theme, projections))
+        export_data["points"].append(make_point(data["ids"][i], data["metadatas"][i], theme, projections))
     export_data["metadata"]["total_articles"] = len(export_data["points"])
     write_export(export_data)
     print("✅ Export complete!")
@@ -196,9 +193,9 @@ def main() -> None:
     
     # Read in pages: one get() of the whole collection binds one SQL variable
     # per row and fails past SQLite's limit (32,766), reached at 33k chunks.
-    data = {"ids": [], "embeddings": [], "metadatas": [], "documents": []}
+    data = {"ids": [], "embeddings": [], "metadatas": []}
     for offset in range(0, collection.count(), 5000):
-        page = collection.get(include=["embeddings", "metadatas", "documents"],
+        page = collection.get(include=["embeddings", "metadatas"],
                               limit=5000, offset=offset)
         for k in data:
             data[k].extend(page[k])
@@ -210,7 +207,6 @@ def main() -> None:
         "ids":        [data["ids"][i] for i in keep],
         "embeddings": [data["embeddings"][i] for i in keep],
         "metadatas":  [data["metadatas"][i] for i in keep],
-        "documents":  [data["documents"][i] for i in keep],
     }
 
     if len(data["embeddings"]) == 0:
@@ -227,10 +223,6 @@ def main() -> None:
     # ---------------------------------------------------------
     # Projections
     # ---------------------------------------------------------
-    print("Computing PCA (2D & 3D)...")
-    pca2 = PCA(n_components=2, random_state=42).fit_transform(X)
-    pca3 = PCA(n_components=3, random_state=42).fit_transform(X)
-
     print("Computing UMAP (2D & 3D)...")
     umap2 = umap.UMAP(n_components=2, min_dist=0.1, n_neighbors=min(15, n_samples-1), metric="cosine", random_state=42).fit_transform(X)
     umap3 = umap.UMAP(n_components=3, min_dist=0.1, n_neighbors=min(15, n_samples-1), metric="cosine", random_state=42).fit_transform(X)
@@ -282,9 +274,7 @@ def main() -> None:
 
     for i in range(n_samples):
         export_data["points"].append(make_point(
-            data["ids"][i], data["metadatas"][i], data["documents"][i], cluster_names[cluster_labels[i]], {
-                "PCA_2D": [float(pca2[i][0]), float(pca2[i][1])],
-                "PCA_3D": [float(pca3[i][0]), float(pca3[i][1]), float(pca3[i][2])],
+            data["ids"][i], data["metadatas"][i], cluster_names[cluster_labels[i]], {
                 "UMAP_2D": [float(umap2[i][0]), float(umap2[i][1])],
                 "UMAP_3D": [float(umap3[i][0]), float(umap3[i][1]), float(umap3[i][2])],
             }))

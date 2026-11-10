@@ -38,7 +38,7 @@ export default function Tendances({ corpus, sub, ask, session, health, latestSou
       {error ? (
         <div className="k-empty"><p>{error}</p><button className="k-btn" onClick={load}>Réessayer</button></div>
       ) : !data ? (
-        <Thinking phrases={[loading ? 'Chargement du corpus (une vingtaine de mégaoctets)…' : 'Préparation…', 'Encore un instant…']} interval={6000} />
+        <Thinking phrases={[loading ? 'Chargement du corpus…' : 'Préparation…', 'Encore un instant…']} interval={6000} />
       ) : tab === 'carte' ? (
         <SemanticMap data={data} latestSources={latestSources} isPhone={isPhone} />
       ) : tab === 'jour' ? (
