@@ -63,7 +63,7 @@ export function useCompare({ gabonToday }) {
       patchCol({ sources: json.results });
       if (json.results.length === 0) { patchCol({ loading: false, empty: true }); return; }
       const streamRes = await postJSON('/answer', { question: topic, corpus: 'presse', urls: json.results.map(r => r.url), ids: [], history: [] }, controller.signal);
-      if (!streamRes.ok) throw new Error(`La génération a échoué (${streamRes.status}).`);
+      if (!streamRes.ok) throw new Error(streamRes.status === 429 ? await errorDetail(streamRes) : `La génération a échoué (${streamRes.status}).`);
       const fromCache = streamRes.headers.get('X-Answer-Source') === 'cache';
       await readStream(streamRes, (answer) => patchCol({ answer, loading: true }));
       patchCol({ loading: false, fromCache });

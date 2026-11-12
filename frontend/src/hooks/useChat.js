@@ -113,7 +113,7 @@ export function useChat({ setApiStatus, authToken }) {
         ids: c === 'codes' ? json.results.map(r => r.id) : [],
         history: priorTurns.slice(-HISTORY_TURNS).map(t => ({ question: t.question, answer: t.answer.slice(0, HISTORY_ANSWER_CHARS) })),
       }, controller.signal);
-      if (!streamRes.ok) throw new Error(`La génération a échoué (${streamRes.status}).`);
+      if (!streamRes.ok) throw new Error(streamRes.status === 429 ? await errorDetail(streamRes) : `La génération a échoué (${streamRes.status}).`);
       // Same question and sources answered recently: served from cache, and said so
       const fromCache = streamRes.headers.get('X-Answer-Source') === 'cache';
       // Its id lets the reader share it (« WhatsApp » under the answer, POST /partages)

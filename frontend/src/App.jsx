@@ -21,6 +21,8 @@ import { useCompare } from './hooks/useCompare';
 import { useCodes } from './hooks/useCodes';
 import { useCorpusData } from './hooks/useCorpusData';
 
+const ASK_PAUSE_MS = 2500;
+
 // Plotly and the dashboard are heavy: only fetched when Tendances is opened
 const Tendances = lazy(() => import('./views/Tendances'));
 const Partage = lazy(() => import('./views/Partage'));
@@ -39,10 +41,15 @@ export default function App() {
   // conversation of its own: asked from the front page, a chip or a clicked article, it
   // must not land under an earlier conversation, nor take it as context. Follow-ups are
   // typed in the assistant itself, which continues the open conversation.
+  // A burst of clicks (article after article) asks only the first: each new one would
+  // cancel the answer being written, whose articles have already been paid for.
   const { switchCorpus, runSearch } = chat;
+  const lastAsk = useRef(0);
   const ask = useCallback((q, target = 'presse', pinned = null) => {
-    switchCorpus(target);
     go('assistant');
+    if (Date.now() - lastAsk.current < ASK_PAUSE_MS) return;
+    lastAsk.current = Date.now();
+    switchCorpus(target);
     runSearch(q, null, target, pinned, true);
   }, [switchCorpus, runSearch]);
 

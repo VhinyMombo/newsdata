@@ -2012,9 +2012,47 @@ def _remember_answer(answer_id: str, req: AnswerRequest, text: str) -> None:
                                 urls=list(req.urls), ids=list(req.ids), expires=now + ANSWERED_TTL_S)
 
 
+# Daily quotas on written answers (the per-minute limit alone allows thousands a day):
+# per account when signed in, per address otherwise, and one ceiling for the whole
+# site. Answers served from the cache cost nothing and are not counted. Kept in
+# memory (one uvicorn process): a restart starts the day's counts again.
+ANSWER_DAILY_ANON = int(os.getenv("ANSWER_DAILY_ANON", "40"))
+ANSWER_DAILY_USER = int(os.getenv("ANSWER_DAILY_USER", "150"))
+ANSWER_DAILY_TOTAL = int(os.getenv("ANSWER_DAILY_TOTAL", "2000"))
+_answer_quota: dict = {"day": None, "total": 0, "by": {}}
+_answer_quota_lock = threading.Lock()
+
+
+def _take_answer_quota(request: Request, token: str | None) -> None:
+    """Count one written answer, or refuse it with a 429 once a quota is reached."""
+    user = auth.get_user_by_token(token) if token else None
+    if user and is_admin(user):
+        who, limit = None, None
+    elif user:
+        who, limit = f"user:{user['id']}", ANSWER_DAILY_USER
+    else:
+        who, limit = f"ip:{_client_ip(request)}", ANSWER_DAILY_ANON
+    with _answer_quota_lock:
+        today = gabon_today()
+        if _answer_quota["day"] != today:
+            _answer_quota.update(day=today, total=0, by={})
+        if _answer_quota["total"] >= ANSWER_DAILY_TOTAL:
+            raise HTTPException(status_code=429, detail=(
+                "L'assistant a beaucoup servi aujourd'hui et fait une pause jusqu'à demain. "
+                "Les articles, les éditions et les tendances restent accessibles."))
+        if who and _answer_quota["by"].get(who, 0) >= limit:
+            raise HTTPException(status_code=429, detail=(
+                "Vous avez atteint le nombre de questions possibles pour aujourd'hui. "
+                + ("Connectez-vous pour en poser davantage, ou revenez demain." if not user
+                   else "Revenez demain.")))
+        _answer_quota["total"] += 1
+        if who:
+            _answer_quota["by"][who] = _answer_quota["by"].get(who, 0) + 1
+
+
 @app.post("/answer")
 @limiter.limit("6/minute")
-def answer(request: Request, req: AnswerRequest):
+def answer(request: Request, req: AnswerRequest, token: str | None = Depends(_bearer_token)):
     answer_id = secrets.token_urlsafe(9)
     cache_key = None
     if not req.history:
@@ -2044,6 +2082,8 @@ def answer(request: Request, req: AnswerRequest):
             else "Aucun article pertinent n'a été trouvé pour cette recherche."
         )
         return StreamingResponse(iter([empty_msg]), media_type="text/plain")
+
+    _take_answer_quota(request, token)
 
     if req.corpus == "codes":
         system_prompt = get_codes_system()

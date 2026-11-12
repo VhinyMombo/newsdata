@@ -4,7 +4,10 @@ export const authHeaders = (token) => (token ? { Authorization: `Bearer ${token}
 
 // Error text for a non-OK response: the API's own `detail` when it sends one
 export async function errorDetail(res) {
-  let detail = `Le serveur a renvoyé une erreur (${res.status}).`;
+  // 429 without a detail: the per-minute limit (the daily quotas send their own text)
+  let detail = res.status === 429
+    ? "Trop de questions d'affilée : patientez une minute avant la suivante."
+    : `Le serveur a renvoyé une erreur (${res.status}).`;
   try {
     const j = await res.json();
     if (typeof j.detail === 'string') detail = j.detail;
@@ -26,9 +29,15 @@ export async function readStream(res, onText) {
   return text;
 }
 
+// The account token, when signed in (useSession's key): /answer counts a reader's
+// daily questions by account rather than by address
+const storedToken = () => {
+  try { return localStorage.getItem('lekiosque_auth_token'); } catch { return null; }
+};
+
 export const postJSON = (path, body, signal) => fetch(`${API_URL}${path}`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', ...authHeaders(storedToken()) },
   body: JSON.stringify(body),
   signal,
 });
