@@ -33,7 +33,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -47,6 +47,7 @@ import codes_search
 import llm
 import mailer
 import oauth
+import share_card
 
 load_dotenv()
 
@@ -2288,6 +2289,20 @@ def read_share(share_id: str = PathParam(max_length=20)):
     return share
 
 
+# The picture above the shared link in WhatsApp: the answer's title, large, and the
+# newspapers it cites (share_card.py). A share never changes, so neither does its picture.
+@app.get("/r/{share_id}/image.jpg")
+def share_image(share_id: str = PathParam(max_length=20)):
+    share = auth.get_share(share_id) if re.fullmatch(r"[A-Za-z0-9_-]{4,20}", share_id) else None
+    if not share:
+        return RedirectResponse(f"{PUBLIC_URL}/og-kiosque-v2.png", status_code=302)
+    papers = [src.get("source", "") for src in share["sources"] if isinstance(src, dict)]
+    kicker = "LES CODES DE LOI" if share["corpus"] == "codes" else "LA PRESSE EN PARLE"
+    image = share_card.render(share["headline"] or share["question"], papers, kicker)
+    return Response(image, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
 @app.get("/r/{share_id}", response_class=HTMLResponse)
 def share_page(share_id: str = PathParam(max_length=20)):
     """What WhatsApp reads for its preview; a reader goes straight on to the answer."""
@@ -2309,9 +2324,11 @@ def share_page(share_id: str = PathParam(max_length=20)):
 <meta property="og:url" content="{PUBLIC_URL}/r/{share_id}">
 <meta property="og:title" content="{e(title)}">
 <meta property="og:description" content="{e(desc)}">
-<meta property="og:image" content="{PUBLIC_URL}/og-kiosque-v2.png">
+<meta property="og:image" content="{PUBLIC_URL}/r/{share_id}/image.jpg">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{e(title)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta http-equiv="refresh" content="0; url={target}">
 </head><body style="font:17px/1.55 Georgia,serif;color:#0F2A3A;max-width:520px;margin:48px auto;padding:0 24px">

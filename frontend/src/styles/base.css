@@ -341,40 +341,43 @@ a.k-src:hover { text-decoration: underline; }
 .k-qnav-menu button { display: flex; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: none; text-align: left; font: inherit; font-size: 0.9rem; line-height: 1.4; color: var(--ink); cursor: pointer; }
 .k-qnav-menu button:hover, .k-qnav-menu button:focus-visible { background: var(--bg-alt); }
 .k-qnav-menu button span { flex: none; min-width: 1.4em; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* Historique: the earlier conversations, as on the assistant's first screen */
-.k-history-menu ul { list-style: none; margin: 0; padding: 0; display: grid; }
-.k-history-menu li { display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
-.k-history-menu li:last-child { border-bottom: 0; }
-.k-history-menu .k-saved-open { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; padding: 10px; color: var(--muted); }
-.k-history-menu .k-saved-title { min-width: 0; color: var(--ink); }
-.k-history-menu .k-saved-meta { min-width: 0; font-variant-numeric: normal; }
-.k-history-menu .k-saved-del { flex: none; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; }
-.k-history-menu > .k-muted, .k-history-note { margin: 0; padding: 10px 12px; font-size: 0.85rem; line-height: 1.5; }
+/* The note under the conversations, for readers without an account */
+.k-history-note { margin: 0; padding: 10px 12px; font-size: 0.85rem; line-height: 1.5; }
 .k-history-note { color: var(--muted); border-top: 1px solid var(--rule); }
 .k-history-note .k-textlink { display: inline; width: auto; padding: 0; font-size: inherit; }
-/* Wide screens: the conversations in a column on the left, the page beside it (centred
-   when there is room, else pushed right); the dock's menu and the list above the
-   suggestions then go */
+/* The conversations' column (Assistant.jsx HistorySide): on the left of wide screens,
+   or as a drawer out of the left edge, from the dock's « Historique », below them */
 .k-history-side { display: none; }
+.k-history-side { flex-direction: column; gap: 10px; overflow-y: auto; overscroll-behavior: contain; background: var(--bg-alt); }
+.k-history-new { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--white); font: 600 0.88rem/1 var(--sans); color: var(--ink); cursor: pointer; }
+.k-history-new:hover { border-color: var(--green); color: var(--green); }
+.k-history-kicker { margin-top: 8px; font: 500 0.68rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.k-history-current { display: grid; gap: 6px; padding: 10px 12px; border-left: 3px solid var(--action, var(--green)); border-radius: 0 8px 8px 0; background: var(--white); }
+.k-history-current .k-saved-title { font-size: 0.9rem; }
+.k-history-side ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.k-history-side li { display: flex; align-items: center; border-radius: 8px; }
+.k-history-side li:hover { background: var(--white); }
+.k-history-side .k-saved-open { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 2px; padding: 9px 6px 9px 8px; border: 0; background: none; text-align: left; color: var(--muted); cursor: pointer; }
+.k-history-side .k-saved-open svg { grid-row: 1 / 3; margin-top: 3px; }
+.k-history-side .k-saved-title { min-width: 0; font-size: 0.88rem; line-height: 1.35; color: var(--ink); }
+.k-history-side .k-saved-del { width: 30px; height: 30px; opacity: 0; }
+.k-history-side li:hover .k-saved-del, .k-history-side .k-saved-del:focus-visible { opacity: 1; }
+.k-history-side > .k-muted { font-size: 0.85rem; }
+.k-history-side .k-history-note { margin-top: auto; padding: 10px 0 0; }
+/* The drawer: above everything, the tab bar included */
+.k-history-drawer { position: fixed; inset: 0; z-index: 200; }
+.k-history-backdrop { position: absolute; inset: 0; background: rgba(15, 42, 58, 0.42); animation: k-fade 0.2s ease-out; }
+.k-history-side.drawer { display: flex; position: absolute; left: 0; top: 0; bottom: 0; width: min(320px, 86vw); padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px calc(env(safe-area-inset-bottom, 0px) + 20px); box-shadow: 8px 0 32px rgba(15, 42, 58, 0.22); animation: k-drawer-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* No hover on a phone: the delete crosses stay in view */
+.k-history-side.drawer .k-saved-del { opacity: 1; }
+.k-history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font: 600 1.05rem/1.2 var(--serif, Georgia, serif); color: var(--ink); }
+@keyframes k-drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes k-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .k-history-side.drawer, .k-history-backdrop { animation: none; } }
 @media (min-width: 1200px) {
-  .k-history-side { display: flex; flex-direction: column; gap: 10px; position: fixed; z-index: 15; left: 0; top: var(--nav-h); bottom: 0; width: 260px; padding: 18px 14px 20px; overflow-y: auto; border-right: 1px solid var(--rule); background: var(--bg-alt); }
+  .k-history-side:not(.drawer) { display: flex; position: fixed; z-index: 15; left: 0; top: var(--nav-h); bottom: 0; width: 260px; padding: 18px 14px 20px; border-right: 1px solid var(--rule); }
   .k-assistant.with-side { margin-left: max(280px, calc(50vw - 460px)); margin-right: auto; }
   .with-side .k-history-nav, .with-side .k-saved { display: none; }
-  .k-history-new { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--white); font: 600 0.88rem/1 var(--sans); color: var(--ink); cursor: pointer; }
-  .k-history-new:hover { border-color: var(--green); color: var(--green); }
-  .k-history-kicker { margin-top: 8px; font: 500 0.68rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-  .k-history-current { display: grid; gap: 6px; padding: 10px 12px; border-left: 3px solid var(--action, var(--green)); border-radius: 0 8px 8px 0; background: var(--white); }
-  .k-history-current .k-saved-title { font-size: 0.9rem; }
-  .k-history-side ul { list-style: none; margin: 0; padding: 0; display: grid; }
-  .k-history-side li { display: flex; align-items: center; border-radius: 8px; }
-  .k-history-side li:hover { background: var(--white); }
-  .k-history-side .k-saved-open { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 2px; padding: 9px 6px 9px 8px; border: 0; background: none; text-align: left; color: var(--muted); cursor: pointer; }
-  .k-history-side .k-saved-open svg { grid-row: 1 / 3; margin-top: 3px; }
-  .k-history-side .k-saved-title { min-width: 0; font-size: 0.88rem; line-height: 1.35; color: var(--ink); }
-  .k-history-side .k-saved-del { width: 30px; height: 30px; opacity: 0; }
-  .k-history-side li:hover .k-saved-del, .k-history-side .k-saved-del:focus-visible { opacity: 1; }
-  .k-history-side > .k-muted { font-size: 0.85rem; }
-  .k-history-side .k-history-note { margin-top: auto; padding: 10px 0 0; }
 }
 /* Narrow phones (iPhone SE): the modes not selected show their icon only, so the dock's row fits */
 @media (max-width: 380px) { .k-dock-modes button:not(.on) { font-size: 0; gap: 0; } }

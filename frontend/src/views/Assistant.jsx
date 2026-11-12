@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, ArrowUp, Check, GitCompare, History, ListOrdered, MessageCircle, Newspaper, Plus, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
 import { LOCAL_HISTORY_MAX } from '../hooks/useChat';
 import { useFollows } from '../hooks/useFollows';
@@ -284,14 +285,23 @@ function SavedConversations({ chat, session }) {
 
 // On a wide screen, the conversations sit in a column on the left, always in view:
 // the open one first, then the earlier ones. Narrower, the dock's « Historique » menu.
-function HistorySide({ chat, session, onNew }) {
+// In a drawer (narrow screens, HistoryNav) it carries its own close button, and any
+// choice made in it closes it.
+function HistorySide({ chat, session, onNew, drawer = false, onClose }) {
   const turns = chat.chatHistory.length;
   // Signed in, the account's list is fetched again as conversations start and grow
   const { list, remove } = useEarlierConversations(chat, session, `${chat.threadId}-${turns}`);
   const current = turns ? chat.chatHistory[0].question : null;
+  const done = (fn) => (...args) => { onClose?.(); fn(...args); };
   return (
-    <aside className="k-history-side" aria-label="Conversations">
-      <button className="k-history-new" onClick={onNew}><SquarePen size={15} aria-hidden="true" /> Nouvelle conversation</button>
+    <aside className={`k-history-side${drawer ? ' drawer' : ''}`} aria-label="Conversations">
+      {drawer && (
+        <div className="k-history-head">
+          <span>Conversations</span>
+          <button className="k-icon-btn" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+        </div>
+      )}
+      <button className="k-history-new" onClick={done(onNew)}><SquarePen size={15} aria-hidden="true" /> Nouvelle conversation</button>
       {current && (
         <div className="k-history-current" aria-current="true">
           <span className="k-history-kicker">En cours</span>
@@ -299,49 +309,51 @@ function HistorySide({ chat, session, onNew }) {
         </div>
       )}
       {list.length > 0 && <span className="k-history-kicker">Précédentes</span>}
-      <ConversationItems list={list} remove={remove} open={chat.openConversation} disabled={chat.searching} />
+      <ConversationItems list={list} remove={remove} open={done(chat.openConversation)} disabled={chat.searching} />
       {!current && !list.length && <p className="k-muted">Vos conversations apparaîtront ici.</p>}
       {!session.user && (
         <p className="k-history-note">
           Sans compte, vos {LOCAL_HISTORY_MAX} dernières conversations restent sur cet appareil.{' '}
-          <button className="k-textlink" onClick={() => session.openAuth('register')}>Créer un compte</button>
+          <button className="k-textlink" onClick={done(() => session.openAuth('register'))}>Créer un compte</button>
         </p>
       )}
     </aside>
   );
 }
 
-// In the dock, during a conversation: the earlier ones, to go back to
-function HistoryNav({ chat, session }) {
+// In the dock, during a conversation, below the wide screens' column: the same list,
+// in a drawer that comes out from the left. Closed by its button, a tap beside it,
+// Échap, or a swipe back to the left.
+function HistoryNav({ chat, session, onNew }) {
   const [open, setOpen] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const boxRef = useRef(null);
-  const { list, remove } = useEarlierConversations(chat, session, refresh);
+  const startX = useRef(null);
   useEffect(() => {
     if (!open) return;
-    const close = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', esc);
+    // The page behind stays still while the drawer scrolls
+    const before = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', esc); document.body.style.overflow = before; };
   }, [open]);
-  const toggle = () => { if (!open) setRefresh(n => n + 1); setOpen(o => !o); };
-  const pick = (id) => { setOpen(false); chat.openConversation(id); };
+  const swipe = {
+    onTouchStart: (e) => { startX.current = e.touches[0].clientX; },
+    onTouchEnd: (e) => {
+      if (startX.current !== null && e.changedTouches[0].clientX - startX.current < -60) setOpen(false);
+      startX.current = null;
+    },
+  };
   return (
-    <div className="k-qnav k-history-nav" ref={boxRef}>
-      <button className="k-icon-btn" onClick={toggle} aria-expanded={open} aria-label="Conversations précédentes">
+    <div className="k-qnav k-history-nav">
+      <button className="k-icon-btn" onClick={() => setOpen(true)} aria-expanded={open} aria-label="Conversations">
         <History size={15} /><span>Historique</span>
       </button>
-      {open && (
-        <div className="k-qnav-menu k-history-menu">
-          {list.length
-            ? <ConversationItems list={list} remove={remove} open={pick} disabled={chat.searching} />
-            : <p className="k-muted">Aucune conversation précédente.</p>}
-          {!session.user && (
-            <p className="k-history-note">
-              Sans compte, vos {LOCAL_HISTORY_MAX} dernières conversations restent sur cet appareil.{' '}
-              <button className="k-textlink" onClick={() => { setOpen(false); session.openAuth('register'); }}>Créer un compte</button>
-            </p>
-          )}
-        </div>
+      {open && createPortal(
+        <div className="k-history-drawer" {...swipe}>
+          <div className="k-history-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
+          <HistorySide chat={chat} session={session} onNew={onNew} drawer onClose={() => setOpen(false)} />
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -507,7 +519,7 @@ export default function Assistant({ chat, compare, sub, session }) {
                 })}
               </div>
               <div className="k-dock-actions">
-                <HistoryNav chat={chat} session={session} />
+                <HistoryNav chat={chat} session={session} onNew={newConversation} />
                 <QuestionsNav entries={chatHistory} threadRef={threadRef} />
                 <button className="k-icon-btn" onClick={newConversation} aria-label="Nouvelle conversation"><SquarePen size={15} /><span>Nouvelle</span></button>
               </div>
