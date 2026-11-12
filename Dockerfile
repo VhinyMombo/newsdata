@@ -84,6 +84,7 @@ COPY --chown=kiosque:kiosque api.py auth.py llm.py report_archive.py report_pdf.
      lekiosque_theme.py push_notify.py mailer.py oauth.py codes_search.py clerk_auth.py share_card.py ./
 COPY --chown=kiosque:kiosque scripts/ ./scripts/
 COPY --chown=kiosque:kiosque assets/report/ ./assets/report/
+COPY --chown=kiosque:kiosque assets/share/ ./assets/share/
 
 USER kiosque
 
