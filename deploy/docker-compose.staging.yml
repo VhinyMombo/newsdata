@@ -41,6 +41,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
+        # From .env.clerk, read by staging.sh up; empty: the site's own sign-in
+        VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
     image: lekiosque-web:staging
     volumes:
       - ./data.json:/usr/share/nginx/html/data.json:ro

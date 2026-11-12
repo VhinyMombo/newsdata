@@ -139,6 +139,16 @@
   flex-shrink: 0;
 }
 
+/* Profile row that opens another window: a quiet button beside its description */
+.auth-manage { display: flex; align-items: center; gap: 14px; }
+.auth-manage p { flex: 1; margin: 0; }
+.auth-ghost {
+  flex-shrink: 0; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border-strong); color: var(--text);
+  font: 600 0.85rem/1.2 var(--sans); transition: var(--t);
+}
+.auth-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
 .auth-switch {
   background: none;
   border: none;
@@ -307,3 +317,12 @@
 .auth-delete-confirm { min-height: 40px; padding: 0 14px; border-radius: 8px; background: var(--clay, #A8431F); color: #fff; font: 600 0.88rem/1 var(--sans); }
 /* After "Supprimer mon compte": a clear confirmation, not a silent sign-out */
 .auth-deleted-mark { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--pop-soft, #EBDDDF); color: var(--pop, var(--accent)); }
+
+/* Clerk's profile window: no profile photo, the Kiosque never shows one (Clerk has no
+   setting to turn it off). Its upload buttons, their hint, and the avatars around them */
+.cl-avatarImageActions, .cl-avatarImageActions ~ *, .cl-userProfile-root .cl-avatarBox { display: none !important; }
+/* Clerk counts its checkboxes as inputs: the 48px rounded fields (CLERK_APPEARANCE)
+   stretched them into a bar */
+.cl-formFieldInput[type="checkbox"], .cl-formFieldCheckboxInput, .cl-cardBox input[type="checkbox"] { min-height: 0 !important; width: 18px !important; height: 18px !important; flex: none !important; margin-top: 2px; border-radius: 4px !important; accent-color: #7A1F2B; }
+/* Profile's small print: Confidentialité · Supprimer mon compte */
+.auth-footlinks { display: flex; justify-content: center; gap: 18px; width: 100%; }

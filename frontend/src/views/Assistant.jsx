@@ -282,6 +282,35 @@ function SavedConversations({ chat, session }) {
   );
 }
 
+// On a wide screen, the conversations sit in a column on the left, always in view:
+// the open one first, then the earlier ones. Narrower, the dock's « Historique » menu.
+function HistorySide({ chat, session, onNew }) {
+  const turns = chat.chatHistory.length;
+  // Signed in, the account's list is fetched again as conversations start and grow
+  const { list, remove } = useEarlierConversations(chat, session, `${chat.threadId}-${turns}`);
+  const current = turns ? chat.chatHistory[0].question : null;
+  return (
+    <aside className="k-history-side" aria-label="Conversations">
+      <button className="k-history-new" onClick={onNew}><SquarePen size={15} aria-hidden="true" /> Nouvelle conversation</button>
+      {current && (
+        <div className="k-history-current" aria-current="true">
+          <span className="k-history-kicker">En cours</span>
+          <span className="k-saved-title">{current}</span>
+        </div>
+      )}
+      {list.length > 0 && <span className="k-history-kicker">Précédentes</span>}
+      <ConversationItems list={list} remove={remove} open={chat.openConversation} disabled={chat.searching} />
+      {!current && !list.length && <p className="k-muted">Vos conversations apparaîtront ici.</p>}
+      {!session.user && (
+        <p className="k-history-note">
+          Sans compte, vos {LOCAL_HISTORY_MAX} dernières conversations restent sur cet appareil.{' '}
+          <button className="k-textlink" onClick={() => session.openAuth('register')}>Créer un compte</button>
+        </p>
+      )}
+    </aside>
+  );
+}
+
 // In the dock, during a conversation: the earlier ones, to go back to
 function HistoryNav({ chat, session }) {
   const [open, setOpen] = useState(false);
@@ -297,7 +326,7 @@ function HistoryNav({ chat, session }) {
   const toggle = () => { if (!open) setRefresh(n => n + 1); setOpen(o => !o); };
   const pick = (id) => { setOpen(false); chat.openConversation(id); };
   return (
-    <div className="k-qnav" ref={boxRef}>
+    <div className="k-qnav k-history-nav" ref={boxRef}>
       <button className="k-icon-btn" onClick={toggle} aria-expanded={open} aria-label="Conversations précédentes">
         <History size={15} /><span>Historique</span>
       </button>
@@ -417,7 +446,8 @@ export default function Assistant({ chat, compare, sub, session }) {
   const inThread = mode !== 'comparer' && !empty;
 
   return (
-    <div className="k-wrap k-page k-assistant">
+    <div className={`k-wrap k-page k-assistant ${mode !== 'comparer' ? 'with-side' : ''}`}>
+      {mode !== 'comparer' && <HistorySide chat={chat} session={session} onNew={newConversation} />}
       {!inThread && (<>
       <header className="k-page-head">
         <span className="k-eyebrow">Assistant</span>

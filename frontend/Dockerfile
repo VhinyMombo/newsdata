@@ -22,6 +22,9 @@ COPY . .
 # default is same-origin, which nginx proxies to the api service.
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
+# Clerk's publishable key (public by design): empty, the site keeps its own sign-in
+ARG VITE_CLERK_PUBLISHABLE_KEY=
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 
 RUN npm run build
 

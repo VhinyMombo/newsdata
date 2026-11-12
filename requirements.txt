@@ -9,6 +9,8 @@ pydantic==2.12.5
 slowapi==0.1.10
 python-dotenv==1.2.2
 bcrypt==5.0.0
+# Clerk session tokens (clerk_auth.py); cryptography comes with the other packages
+PyJWT==2.15.1
 
 # --- RAG / vector store ----------------------------------------------------
 chromadb==1.5.2

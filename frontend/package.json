@@ -11,6 +11,8 @@
     "share": "vite build && vite preview --host --port 5173"
   },
   "dependencies": {
+    "@clerk/localizations": "4.24.4",
+    "@clerk/react": "6.18.4",
     "lucide-react": "^0.577.0",
     "plotly.js": "^3.4.0",
     "plotly.js-dist-min": "^3.4.0",

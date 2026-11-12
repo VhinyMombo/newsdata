@@ -42,6 +42,7 @@ from langchain_ollama.embeddings import OllamaEmbeddings
 from pydantic import BaseModel, Field
 
 import auth
+import clerk_auth
 import codes_search
 import llm
 import mailer
@@ -452,8 +453,12 @@ def get_rag_system() -> str:
         try:
             latest_d = date.fromisoformat(latest)
             if latest_d < today:
-                latest_line = (f"Les articles les plus récents du corpus datent du {_date_fr(latest_d)} : "
-                               "la collecte du jour n'a pas encore eu lieu.\n")
+                # Said to the model only: repeated to the reader, « la collecte » opened
+                # answers with an apology in the site's own jargon
+                latest_line = (f"Les articles les plus récents du corpus datent du {_date_fr(latest_d)} "
+                               "(ceux d'aujourd'hui ne sont pas encore arrivés). Ne le signale pas "
+                               "en ouverture de réponse et ne parle jamais de collecte : commence par "
+                               "les faits, datés dès la première phrase.\n")
         except ValueError:
             pass
     return f"""\
@@ -470,8 +475,9 @@ puis résume ce que les articles disent de plus proche du sujet. Ne détourne ja
 la question vers un autre sujet pour donner l'impression de répondre.
 - Si les articles couvrent des dates différentes, donne la chronologie des événements.
 - Si la question porte sur aujourd'hui ou la journée et que les articles datent d'un jour \
-précédent, ne les présente jamais comme ceux d'aujourd'hui : annonce leur date réelle, par \
-exemple « Le 22 octobre, dernière journée couverte, … ».
+précédent, ne les présente jamais comme ceux d'aujourd'hui : ouvre directement sur les faits \
+en annonçant leur date réelle, par exemple « Le 22 octobre, dernière journée couverte, … », \
+sans phrase d'excuse ni d'explication avant.
 - Combine les informations de tous les articles.
 - Si la question fait suite à un échange précédent, interprète-la dans le contexte \
 de la conversation, mais fonde ta réponse sur les articles fournis.
@@ -1201,6 +1207,44 @@ def exchange_login_code(request: Request, req: LoginCodeRequest):
     return {"user": user, "token": token}
 
 
+class ClerkSignInRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=8000)
+
+
+# Signed in through Clerk (clerk_auth.py): its session token, checked here, is traded
+# once for a session of the Kiosque, the same as after any other sign-in
+@app.post("/auth/clerk")
+@limiter.limit("20/minute")
+def clerk_sign_in(request: Request, req: ClerkSignInRequest):
+    if not clerk_auth.enabled():
+        raise HTTPException(status_code=404, detail="Introuvable.")
+    try:
+        claims = clerk_auth.verify_session_token(req.token)
+        user, token = auth.login_with_clerk(clerk_auth.get_user(claims["sub"]))
+    except (clerk_auth.ClerkError, auth.AuthError) as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    return {"user": user, "token": token}
+
+
+# A session that came from Clerk ends because the reader left Clerk on this page. When
+# they did it by deleting their account in Clerk's own window (Sécurité › Supprimer le
+# compte), the Kiosque account goes too, as with the profile's « Supprimer mon compte »:
+# only on Clerk's word that the user no longer exists, never on the page's.
+@app.post("/auth/clerk/ended")
+@limiter.limit("20/minute")
+def clerk_session_ended(request: Request, token: str | None = Depends(_bearer_token)):
+    user = auth.get_user_by_token(token) if token else None
+    deleted = False
+    if user and clerk_auth.enabled():
+        clerk_id = auth.clerk_user_id(user["id"])
+        if clerk_id and clerk_auth.user_exists(clerk_id) is False:
+            auth.delete_user(user["id"])
+            deleted = True
+    if token and not deleted:
+        auth.delete_session(token)
+    return {"deleted": deleted}
+
+
 @app.post("/auth/logout")
 def logout(token: str | None = Depends(_bearer_token)):
     if token:
@@ -1215,6 +1259,13 @@ def me(user: dict = Depends(require_user)):
 
 @app.delete("/auth/me")
 def delete_me(user: dict = Depends(require_user)):
+    # Gone from Clerk first: an account left there would sign straight back in
+    clerk_id = auth.clerk_user_id(user["id"])
+    if clerk_id and clerk_auth.enabled():
+        try:
+            clerk_auth.delete_user(clerk_id)
+        except clerk_auth.ClerkError as e:
+            raise HTTPException(status_code=502, detail=str(e))
     auth.delete_user(user["id"])
     return {"status": "ok"}
 

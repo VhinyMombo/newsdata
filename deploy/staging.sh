@@ -24,14 +24,37 @@ dc() { docker compose --project-directory "$ROOT" -f "$ROOT/src/deploy/docker-co
 write_nginx() {
   sed -e 's/server api:8000;/server staging-api:8000;/' \
       -e 's/^    server_name _;/    server_name _;\n    auth_basic "Le Kiosque staging";\n    auth_basic_user_file \/etc\/nginx\/htpasswd;\n    sub_filter_once on;\n    sub_filter "<\/head>" "<style>body::after{content:\\"STAGING\\";position:fixed;z-index:9999;left:8px;bottom:8px;padding:3px 8px;border-radius:6px;background:#b45309;color:#fff;font:700 11px sans-serif;letter-spacing:.08em;pointer-events:none}<\/style><\/head>";/' \
-      "$ROOT/src/frontend/nginx.conf" > "$ROOT/nginx.conf"
+      "$ROOT/src/frontend/nginx.conf" > "$ROOT/nginx.conf.tmp"
+  # The API cannot ask for the password: the site's own sign-in sends its session in
+  # the same Authorization header, which then no longer carries it. The page, behind
+  # the password, hands the browser a cookie; the API takes only calls that carry it.
+  # Drawn once and kept, and set by every file behind the password, sw.js included:
+  # the installed app keeps the page in its cache, but checks sw.js at each opening.
+  [ -s "$ROOT/gate" ] || ( umask 077; openssl rand -hex 24 > "$ROOT/gate" )
+  gate=$(cat "$ROOT/gate")
+  # Never "always": the 401 asking for the password would hand the cookie to anyone
+  cookie="add_header Set-Cookie \"kiosque_staging=$gate; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax\";"
+  sed -e "s|^    location /api/ {|    location /api/ {\n        auth_basic off;\n        if (\$cookie_kiosque_staging != \"$gate\") { return 401; }|" \
+      -e "/^    location \/api\/ {/b" -e "/^    location \/r\/ {/b" \
+      -e "s|^\(    location .*{\)$|\1\n        $cookie|" \
+      "$ROOT/nginx.conf.tmp" > "$ROOT/nginx.conf"
+  rm -f "$ROOT/nginx.conf.tmp"
   grep -q 'server staging-api:8000;' "$ROOT/nginx.conf" && grep -q 'auth_basic_user_file' "$ROOT/nginx.conf" \
+    && grep -q 'cookie_kiosque_staging' "$ROOT/nginx.conf" && grep -q 'Set-Cookie "kiosque_staging=' "$ROOT/nginx.conf" \
     || { echo "nginx settings not as expected: nothing started" >&2; exit 1; }
 }
 
-# Only the keys it needs, read from the live settings and never displayed
+# Only the keys it needs, read from the live settings and never displayed. Clerk's
+# development keys, when the user has put them in ~/lekiosque-staging/.env.clerk,
+# switch the copy's sign-in to Clerk.
 write_env() {
   ( umask 077; grep -E '^(LLM_[A-Z_]*|GEMINI_API_KEY|GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET)=' "$LIVE/.env.docker" > "$ROOT/.env.staging" )
+  if [ -f "$ROOT/.env.clerk" ]; then
+    ( umask 077; grep -E '^CLERK_(PUBLISHABLE|SECRET)_KEY=' "$ROOT/.env.clerk" >> "$ROOT/.env.staging" )
+    # The public one is also baked into the site at build time
+    CLERK_PUBLISHABLE_KEY=$(grep -E '^CLERK_PUBLISHABLE_KEY=' "$ROOT/.env.clerk" | cut -d= -f2- | tr -d "\"' \r")
+    export CLERK_PUBLISHABLE_KEY
+  fi
 }
 
 case "${1:-}" in
@@ -64,6 +87,8 @@ case "${1:-}" in
     write_env
     write_nginx
     flock -w 1500 "$LOCK" docker compose --project-directory "$ROOT" -f "$ROOT/src/deploy/docker-compose.staging.yml" up -d --build --quiet-pull
+    # A container left running keeps the previous settings, and its gate cookie
+    dc exec -T staging-web nginx -s reload >/dev/null 2>&1 || true
     dc ps --format '{{.Service}} {{.Status}}'
     ;;
   down)

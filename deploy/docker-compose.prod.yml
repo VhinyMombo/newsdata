@@ -22,6 +22,11 @@ services:
   web:
     # Caddy reaches nginx over the compose network
     ports: !override []
+    build:
+      args:
+        # Clerk's public key, from the server's .env (read by compose itself): with
+        # it the site signs in through Clerk, without it the old sign-in stays
+        VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
 
   ollama:
     environment:

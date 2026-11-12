@@ -1,3 +1,4 @@
+/* global process */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -21,7 +22,8 @@ export default defineConfig({
         // never precache it, it must always hit the network like today.
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         // Launch images are fetched by iOS itself, only at install: no need to precache them
-        globIgnores: ['data.json', 'splash/**', 'og-kiosque*.png'],
+        // Clerk's sign-in code is fetched only by a build with its key: never ahead of time
+        globIgnores: ['data.json', 'splash/**', 'og-kiosque*.png', ...(process.env.VITE_CLERK_PUBLISHABLE_KEY ? [] : ['assets/ClerkRoot-*.js'])],
         // Main bundle is ~5MB (plotly.js is the bulk of it); above Workbox's
         // 2MB default. Raise the ceiling rather than exclude it from
         // precache, so the app still works offline after first load.

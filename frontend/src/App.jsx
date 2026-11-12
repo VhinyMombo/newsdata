@@ -122,6 +122,8 @@ export default function App() {
           onDeleteAccount={session.deleteAccount}
           onProviderInApp={session.signInFromApp}
           appCode={{ asked: session.appCodeAsked, confirm: session.confirmAppCode, cancel: session.cancelAppCode }}
+          clerkOn={session.clerkOn}
+          onManageSecurity={session.manageSecurity}
         />
       )}
 

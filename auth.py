@@ -211,6 +211,11 @@ def _migrate_sign_in_trust(conn: sqlite3.Connection) -> None:
     if "code_hash" not in {r["name"] for r in conn.execute("PRAGMA table_info(app_logins)")}:
         conn.execute("ALTER TABLE app_logins ADD COLUMN code_hash TEXT")
         conn.execute("ALTER TABLE app_logins ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+    # The reader's Clerk account (clerk_auth.py), once they have signed in through it
+    if "clerk_user_id" not in {r["name"] for r in conn.execute("PRAGMA table_info(users)")}:
+        conn.execute("ALTER TABLE users ADD COLUMN clerk_user_id TEXT")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk ON users(clerk_user_id) "
+                 "WHERE clerk_user_id IS NOT NULL")
 
 
 # Accounts opened through Facebook with a phone number have no e-mail: they get
@@ -760,6 +765,79 @@ def confirm_app_login(app_secret: str, code: str) -> dict:
         return {"status": "ok", "user": _public_user(user), "token": _create_session(conn, user["id"])}
 
 
+def _hand_to_proven_owner(conn: sqlite3.Connection, user_id: int) -> None:
+    """The address's proven owner arrives on an account never proven: every other
+    way in stops working (password, sessions, identities, Clerk account, devices)."""
+    unusable = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode()
+    conn.execute("UPDATE users SET password_hash = ?, email_verified_at = datetime('now'), "
+                 "clerk_user_id = NULL WHERE id = ?", (unusable, user_id))
+    conn.execute("DELETE FROM devices WHERE endpoint IN "
+                 "(SELECT endpoint FROM push_subscriptions WHERE user_id = ?)", (user_id,))
+    for table in ("sessions", "password_resets", "login_codes", "app_logins", "identities", "push_subscriptions"):
+        conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+
+
+def login_with_clerk(clerk_user: dict) -> tuple[dict, str]:
+    """The account for a reader Clerk has signed in, and a session on it.
+
+    Found by its Clerk account; else by the account number set at the import
+    (scripts/clerk_import.py), which only this server writes; else by address,
+    only when Clerk has proven it, with the same care as for Google; else a new
+    account. An address Clerk has not proven is never trusted here."""
+    clerk_id = clerk_user["id"]
+    email = clerk_user.get("email") or ""
+    verified = bool(clerk_user.get("email_verified")) and bool(_EMAIL_RE.match(email))
+    external = clerk_user.get("external_id") or ""
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM users WHERE clerk_user_id = ?", (clerk_id,)).fetchone()
+        if not row and external.isdigit():
+            row = conn.execute("SELECT * FROM users WHERE id = ? AND clerk_user_id IS NULL",
+                               (int(external),)).fetchone()
+        if not row and verified:
+            row = conn.execute("SELECT * FROM users WHERE email = ? AND clerk_user_id IS NULL", (email,)).fetchone()
+            if row and not row["email_verified_at"]:
+                _hand_to_proven_owner(conn, row["id"])
+        if row:
+            user_id = row["id"]
+            conn.execute("UPDATE users SET clerk_user_id = ? WHERE id = ?", (clerk_id, user_id))
+            if verified and row["email"] == email and not row["email_verified_at"]:
+                conn.execute("UPDATE users SET email_verified_at = datetime('now') WHERE id = ?", (user_id,))
+        else:
+            if not verified:
+                raise AuthError("Confirmez d'abord votre adresse e-mail.")
+            if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+                # Already tied to another Clerk account: never two accounts on one address
+                raise AuthError("Un compte existe déjà avec cette adresse e-mail.")
+            name = (clerk_user.get("name") or "").strip()[:80] or email.split("@")[0]
+            unusable = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode()
+            user_id = conn.execute(
+                "INSERT INTO users (email, password_hash, display_name, email_verified_at, clerk_user_id) "
+                "VALUES (?, ?, ?, datetime('now'), ?)", (email, unusable, name, clerk_id),
+            ).lastrowid
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _public_user(user), _create_session(conn, user_id)
+
+
+def clerk_user_id(user_id: int) -> str | None:
+    with _conn() as conn:
+        row = conn.execute("SELECT clerk_user_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row["clerk_user_id"] if row else None
+
+
+def users_for_clerk_import() -> list[dict]:
+    """Accounts not yet in Clerk, with what the import sends (scripts/clerk_import.py)."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, email, password_hash, display_name, created_at, email_verified_at FROM users "
+            "WHERE clerk_user_id IS NULL ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_clerk_user_id(user_id: int, clerk_id: str) -> None:
+    with _conn() as conn:
+        conn.execute("UPDATE users SET clerk_user_id = ? WHERE id = ?", (clerk_id, user_id))
+
+
 def login_with_identity(provider: str, ident: dict) -> int:
     """The account for this Google or Facebook identity: the one already linked,
     else an existing account with the same Google-verified address, else a new one.
@@ -787,13 +865,7 @@ def login_with_identity(provider: str, ident: dict) -> int:
                 )
             user_id = existing["id"]
             if not existing["email_verified_at"]:
-                unusable = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode()
-                conn.execute("UPDATE users SET password_hash = ?, email_verified_at = datetime('now') WHERE id = ?",
-                             (unusable, user_id))
-                conn.execute("DELETE FROM devices WHERE endpoint IN "
-                             "(SELECT endpoint FROM push_subscriptions WHERE user_id = ?)", (user_id,))
-                for table in ("sessions", "password_resets", "login_codes", "app_logins", "identities", "push_subscriptions"):
-                    conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+                _hand_to_proven_owner(conn, user_id)
         else:
             address = email if email and _EMAIL_RE.match(email) else f"{provider}-{subject}@{NO_EMAIL_DOMAIN}"
             name = (ident.get("name") or "").strip()[:80] or (email.split("@")[0] if email else "Lecteur")

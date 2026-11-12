@@ -6,6 +6,7 @@ import {
 import { API_URL } from '../utils/api';
 import { PLATFORM, isStandalone } from '../hooks/useInstall';
 import { registerDevice } from '../utils/push';
+import { useClerkBridge } from '../hooks/clerkBridge';
 
 // Google refuses to sign in inside the browsers built into WhatsApp, Facebook or
 // Instagram ("disallowed_useragent"): offer it only where it works
@@ -70,6 +71,62 @@ function ProviderButtons({ providers, onInApp, busy, appCode }) {
   );
 }
 
+// What an account brings, said before the form in both modes: the header button
+// opens "Se connecter", where most visitors have no account yet
+function Perks() {
+  return (
+    <ul className="auth-perks">
+      <li><History size={16} aria-hidden="true" /><span><b>Vos conversations gardées.</b> Reprenez-les plus tard, sur tous vos appareils.</span></li>
+      <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
+      <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
+    </ul>
+  );
+}
+
+// Clerk's form, inside the Kiosque's window, without its own card, title or switch
+// link: the window's header and tabs already say all that
+const EMBEDDED = {
+  elements: {
+    rootBox: { width: '100%' },
+    // Room above the first button for Clerk's « last used » badge, which sits on its edge
+    cardBox: { width: '100%', maxWidth: '100%', boxShadow: 'none', border: 'none', borderTop: 'none', borderRadius: 0, overflow: 'visible' },
+    card: { padding: '14px 0 0', boxShadow: 'none', border: 'none', background: 'transparent', overflow: 'visible' },
+    header: { display: 'none' },
+    logoBox: { display: 'none' },
+    footer: { background: 'transparent', marginTop: '4px' },
+    footerAction: { display: 'none' },
+  },
+};
+
+function ClerkEntry({ mode, onSwitchMode }) {
+  const bridge = useClerkBridge();
+  if (!bridge) return null;
+  const { SignIn, SignUp } = bridge;
+  const here = window.location.href;
+  return (
+    <div className="auth-form">
+      <header className="auth-brand">
+        <img src="/icons/icon-192.png" alt="" width="56" height="56" />
+        <span className="auth-brand-name">Le Kiosque</span>
+        <span className="auth-brand-rule" aria-hidden="true" />
+        <p className="auth-brand-dek">La presse et les lois, à portée de question.</p>
+      </header>
+      <div className="auth-tabs" role="tablist" aria-label="Compte">
+        <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'on' : ''} onClick={() => onSwitchMode('login')}>Se connecter</button>
+        <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'on' : ''} onClick={() => onSwitchMode('register')}>Créer un compte</button>
+      </div>
+      <h2 className="sr-only">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
+      <Perks />
+      <div className="auth-clerk">
+        {mode === 'register'
+          ? <SignUp routing="virtual" appearance={EMBEDDED} forceRedirectUrl={here} signInForceRedirectUrl={here} />
+          : <SignIn routing="virtual" appearance={EMBEDDED} withSignUp forceRedirectUrl={here} signUpForceRedirectUrl={here} />}
+      </div>
+      <p className="auth-fineprint">Gratuit. Votre e-mail sert seulement à vous connecter. <a href="/confidentialite.html">Confidentialité</a></p>
+    </div>
+  );
+}
+
 const FOLLOW_TYPE_LABELS = { keyword: 'Mot-clé', source: 'Source', theme: 'Thème' };
 
 // Web Push's applicationServerKey wants a Uint8Array, VAPID public keys are
@@ -88,7 +145,7 @@ const EDITION_PREFS = [
   ['weekly_review', 'La revue de la semaine', 'Chaque vendredi à 18h, les grands sujets des sept derniers jours.'],
 ];
 
-export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount, onProviderInApp, appCode }) {
+export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy, error, user, authToken, onLogout, onProfileUpdated, onForgot, resetToken, providers = [], onDeleteAccount, onProviderInApp, appCode, clerkOn = false, onManageSecurity }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -284,6 +341,19 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
             <p className="auth-step-text">Vous pouvez continuer à lire Le Kiosque et à poser des questions sans compte.</p>
             <button type="button" className="auth-submit" onClick={onClose}>Continuer la lecture</button>
           </div>
+        ) : clerkOn && (mode === 'login' || mode === 'register') ? (
+          <ClerkEntry mode={mode} onSwitchMode={onSwitchMode} />
+        ) : mode === 'clerk-error' ? (
+          // Clerk signed the reader in, but the Kiosque could not open their account
+          <div className="auth-form" role="alert">
+            <header className="auth-brand">
+              <img src="/icons/icon-192.png" alt="" width="56" height="56" />
+              <span className="auth-brand-name">Le Kiosque</span>
+              <span className="auth-brand-rule" aria-hidden="true" />
+            </header>
+            <p className="auth-step-text">{error || 'La connexion a échoué.'}</p>
+            <button type="button" className="auth-submit" onClick={() => onSwitchMode('login')}>Réessayer</button>
+          </div>
         ) : mode !== 'profile' ? (
           <form
             className="auth-form"
@@ -331,11 +401,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
               <h2 className="sr-only">{mode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2>
               {/* Said in both modes: the header button opens "Se connecter", where most
               visitors have no account yet */}
-              <ul className="auth-perks">
-                <li><History size={16} aria-hidden="true" /><span><b>Vos conversations gardées.</b> Reprenez-les plus tard, sur tous vos appareils.</span></li>
-                <li><Star size={16} aria-hidden="true" /><span><b>Vos sujets suivis.</b> Un nom, un thème ou un journal : l'accueil vous montre ce qui a bougé depuis votre visite.</span></li>
-                <li><Bell size={16} aria-hidden="true" /><span><b>Prévenu quand ça bouge.</b> Une notification quand un sujet suivi revient fort dans la presse.</span></li>
-              </ul>
+              <Perks />
               <ProviderButtons providers={providers} onInApp={onProviderInApp} busy={busy} appCode={{ ...appCode, error }} />
               {mode === 'register' && (
                 <input
@@ -380,12 +446,23 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
               </div>
             </form>
 
-            <form className="auth-form" onSubmit={changePassword}>
-              <label className="auth-label">Changer le mot de passe</label>
-              <input className="auth-input" type="password" placeholder="Mot de passe actuel" value={currentPw} onChange={e => setCurrentPw(e.target.value)} autoComplete="current-password" />
-              <input className="auth-input" type="password" placeholder="Nouveau mot de passe" value={newPw} onChange={e => setNewPw(e.target.value)} minLength={8} autoComplete="new-password" />
-              <button type="submit" className="auth-submit auth-submit-sm" disabled={profileBusy || !currentPw || !newPw}>Mettre à jour</button>
-            </form>
+            {clerkOn ? (
+              // Password, addresses and linked Google account: in Clerk's window
+              <div className="auth-form">
+                <label className="auth-label">Connexion et sécurité</label>
+                <div className="auth-manage">
+                  <p className="chat-empty-sub">Mot de passe, adresse e-mail, compte Google lié, suppression du compte.</p>
+                  <button type="button" className="auth-ghost" onClick={onManageSecurity}>Gérer</button>
+                </div>
+              </div>
+            ) : (
+              <form className="auth-form" onSubmit={changePassword}>
+                <label className="auth-label">Changer le mot de passe</label>
+                <input className="auth-input" type="password" placeholder="Mot de passe actuel" value={currentPw} onChange={e => setCurrentPw(e.target.value)} autoComplete="current-password" />
+                <input className="auth-input" type="password" placeholder="Nouveau mot de passe" value={newPw} onChange={e => setNewPw(e.target.value)} minLength={8} autoComplete="new-password" />
+                <button type="submit" className="auth-submit auth-submit-sm" disabled={profileBusy || !currentPw || !newPw}>Mettre à jour</button>
+              </form>
+            )}
 
             {profileErr && <p className="auth-error">{profileErr}</p>}
             {profileMsg && <p className="auth-success">{profileMsg}</p>}
@@ -395,7 +472,7 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
               {follows === null ? (
                 <p className="chat-empty-sub">Chargement…</p>
               ) : follows.length === 0 ? (
-                <p className="chat-empty-sub">Aucun sujet suivi pour l'instant — suivez un mot-clé, une source ou un thème depuis les Statistiques (icône ★).</p>
+                <p className="chat-empty-sub">Aucun sujet suivi pour l'instant — suivez un mot-clé, une source ou un thème depuis les Tendances (icône ★).</p>
               ) : (
                 <div className="auth-follows-list">
                   {follows.map(f => (
@@ -467,10 +544,13 @@ export default function AuthModal({ mode, onClose, onSwitchMode, onSubmit, busy,
                   <button type="button" className="auth-switch" onClick={() => setConfirmDelete(false)}>Annuler</button>
                 </div>
                 {deleteErr && <p className="auth-error">{deleteErr}</p>}
-              </>) : (
-                <button type="button" className="auth-switch" onClick={() => setConfirmDelete(true)}>Supprimer mon compte</button>
-              )}
-              <a className="auth-switch" href="/confidentialite.html">Confidentialité</a>
+              </>) : null}
+              {/* Deleting stays discreet, in the profile's small print */}
+              <div className="auth-footlinks">
+                <a className="auth-switch" href="/confidentialite.html">Confidentialité</a>
+                {/* With Clerk, in its window (Gérer › Sécurité) */}
+                {!confirmDelete && !clerkOn && <button type="button" className="auth-switch" onClick={() => setConfirmDelete(true)}>Supprimer mon compte</button>}
+              </div>
             </div>
           </div>
         )}

@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/base.css'
 import './styles/accent.css'
@@ -10,6 +10,7 @@ import { countNotificationOpen } from './utils/notifOpen'
 import { countNewspaperClicks } from './utils/outbound'
 import { settleAfterKeyboard } from './utils/keyboard'
 import { isBusy } from './utils/lock'
+import { CLERK_KEY } from './hooks/clerkBridge'
 
 // A new version takes over a few seconds after the page opens. Reloading onto it
 // then swallowed the reader's first click or the question being typed: reload at
@@ -49,11 +50,31 @@ window.addEventListener('hashchange', countNotificationOpen)
 countNewspaperClicks()
 settleAfterKeyboard()
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    {installer ? <Installer /> : <App />}
-  </StrictMode>,
-)
+const root = createRoot(document.getElementById('root'))
+const render = (app) => root.render(<StrictMode>{app}</StrictMode>)
+
+// With Clerk's key in the build, Clerk proves who signs in (hooks/clerkBridge.js); its
+// code is fetched only then
+if (!installer && CLERK_KEY) {
+  const RETRY_KEY = 'kiosque_clerk_retry'
+  import('./components/ClerkRoot.jsx')
+    .then(m => {
+      try { sessionStorage.removeItem(RETRY_KEY) } catch { /* no storage */ }
+      render(createElement(m.default, null, <App />))
+    })
+    .catch(err => {
+      // Most often a page kept from before an update, asking for a file the server no
+      // longer has: reload. Only once a minute, so a lasting failure cannot loop; the
+      // site's own sign-in then still works.
+      console.error('[Kiosque] Clerk not loaded:', err)
+      let last = 0
+      try { last = Number(sessionStorage.getItem(RETRY_KEY)) || 0; sessionStorage.setItem(RETRY_KEY, String(Date.now())) } catch { last = Date.now() }
+      if (Date.now() - last > 60_000) window.location.reload()
+      else render(<App />)
+    })
+} else {
+  render(installer ? <Installer /> : <App />)
+}
 
 // Lift the installed app's splash (index.html) once the first frame is painted
 requestAnimationFrame(() => {
