@@ -131,7 +131,7 @@ export default function App() {
         {view === 'editions' && <Editions reports={reports} sub={route.sub} />}
         {view === 'tendances' && (
           <Suspense fallback={<div className="k-page"><p className="k-muted">Chargement…</p></div>}>
-            <Tendances corpus={corpus} sub={route.sub} ask={ask} session={session} health={health} latestSources={chat.chatHistory.at(-1)?.sources} />
+            <Tendances corpus={corpus} sub={route.sub} ask={ask} session={session} health={health} />
           </Suspense>
         )}
         {view === 'codes' && <Codes codes={codes} ask={ask} />}

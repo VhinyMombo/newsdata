@@ -341,6 +341,17 @@ a.k-src:hover { text-decoration: underline; }
 .k-qnav-menu button { display: flex; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: none; text-align: left; font: inherit; font-size: 0.9rem; line-height: 1.4; color: var(--ink); cursor: pointer; }
 .k-qnav-menu button:hover, .k-qnav-menu button:focus-visible { background: var(--bg-alt); }
 .k-qnav-menu button span { flex: none; min-width: 1.4em; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Historique: the earlier conversations, as on the assistant's first screen */
+.k-history-menu ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.k-history-menu li { display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
+.k-history-menu li:last-child { border-bottom: 0; }
+.k-history-menu .k-saved-open { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; padding: 10px; color: var(--muted); }
+.k-history-menu .k-saved-title { min-width: 0; color: var(--ink); }
+.k-history-menu .k-saved-meta { min-width: 0; font-variant-numeric: normal; }
+.k-history-menu .k-saved-del { flex: none; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; }
+.k-history-menu > .k-muted, .k-history-note { margin: 0; padding: 10px 12px; font-size: 0.85rem; line-height: 1.5; }
+.k-history-note { color: var(--muted); border-top: 1px solid var(--rule); }
+.k-history-note .k-textlink { display: inline; width: auto; padding: 0; font-size: inherit; }
 /* Narrow phones (iPhone SE): the modes not selected show their icon only, so the dock's row fits */
 @media (max-width: 380px) { .k-dock-modes button:not(.on) { font-size: 0; gap: 0; } }
 /* A settings page opened over another one closes back to it (Notifications.jsx) */

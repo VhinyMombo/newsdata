@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, Map as MapIcon, MessageCircle, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, MessageCircle, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
+import { LOCAL_HISTORY_MAX } from '../hooks/useChat';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 import { API_URL, postJSON } from '../utils/api';
@@ -189,52 +190,104 @@ function when(utc) {
     : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
-// Without an account, a conversation is lost once another starts: say what signing up keeps
+// Without an account, only the last few conversations stay, on this device: say what signing up keeps
 function SaveHint({ openAuth }) {
   return (
     <p className="k-saved-hint">
       <History size={15} aria-hidden="true" />
-      <span>Vos conversations disparaissent quand vous en commencez une autre. <button className="k-textlink" onClick={() => openAuth('register')}>Créez un compte</button> pour les retrouver sur tous vos appareils.</span>
+      <span>Sans compte, seules vos {LOCAL_HISTORY_MAX} dernières conversations restent, sur cet appareil. <button className="k-textlink" onClick={() => openAuth('register')}>Créez un compte</button> pour les garder toutes, sur tous vos appareils.</span>
     </p>
   );
 }
 
-// The signed-in reader's earlier conversations, to pick up again, above the suggestions
-function SavedConversations({ chat, session }) {
+// The reader's earlier conversations, the open one left out: from the account when
+// signed in (fetched again when `refresh` changes), from this device otherwise
+function useEarlierConversations(chat, session, refresh) {
   const { authToken } = session;
-  const [list, setList] = useState(null);
-  const [all, setAll] = useState(false);
+  const [server, setServer] = useState(null);
   useEffect(() => {
     if (!authToken) return;
     fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${authToken}` } })
       .then(r => (r.ok ? r.json() : []))
-      .then(setList)
-      .catch(() => setList([]));
-  }, [authToken]);
-
-  if (!list?.length) return null;
+      .then(setServer)
+      .catch(() => setServer([]));
+  }, [authToken, refresh]);
+  const list = (authToken
+    ? (server || [])
+    : chat.localHistory.map(c => ({ ...c, turns: c.turns.length }))
+  ).filter(c => c.id !== chat.threadId);
   const remove = (id) => {
-    setList(l => l.filter(c => c.id !== id));
+    if (!authToken) { chat.removeLocal(id); return; }
+    setServer(l => (l || []).filter(c => c.id !== id));
     fetch(`${API_URL}/conversations/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${authToken}` } }).catch(() => {});
   };
-  const shown = all ? list : list.slice(0, 5);
+  return { list, remove };
+}
+
+function ConversationItems({ list, remove, open, disabled }) {
+  return (
+    <ul>
+      {list.map(c => (
+        <li key={c.id}>
+          <button className="k-saved-open" onClick={() => open(c.id)} disabled={disabled}>
+            {c.corpus === 'codes' ? <Scale size={15} aria-hidden="true" /> : <Newspaper size={15} aria-hidden="true" />}
+            <span className="k-saved-title">{c.title}</span>
+            <span className="k-saved-meta">{c.turns > 1 ? `${c.turns} questions · ` : ''}{when(c.updated_at)}</span>
+          </button>
+          <button className="k-saved-del" onClick={() => remove(c.id)} aria-label={`Supprimer la conversation « ${c.title} »`}><X size={15} /></button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// Above the suggestions, before a conversation starts
+function SavedConversations({ chat, session }) {
+  const { list, remove } = useEarlierConversations(chat, session, 0);
+  const [all, setAll] = useState(false);
+  if (!list.length) return null;
   return (
     <section className="k-saved" aria-labelledby="k-saved-title">
       <span className="k-label" id="k-saved-title">Vos conversations</span>
-      <ul>
-        {shown.map(c => (
-          <li key={c.id}>
-            <button className="k-saved-open" onClick={() => chat.openConversation(c.id)} disabled={chat.searching}>
-              {c.corpus === 'codes' ? <Scale size={15} aria-hidden="true" /> : <Newspaper size={15} aria-hidden="true" />}
-              <span className="k-saved-title">{c.title}</span>
-              <span className="k-saved-meta">{c.turns > 1 ? `${c.turns} questions · ` : ''}{when(c.updated_at)}</span>
-            </button>
-            <button className="k-saved-del" onClick={() => remove(c.id)} aria-label={`Supprimer la conversation « ${c.title} »`}><X size={15} /></button>
-          </li>
-        ))}
-      </ul>
+      <ConversationItems list={all ? list : list.slice(0, 5)} remove={remove} open={chat.openConversation} disabled={chat.searching} />
       {list.length > 5 && !all && <button className="k-textlink" onClick={() => setAll(true)}>Voir les {list.length} conversations</button>}
     </section>
+  );
+}
+
+// In the dock, during a conversation: the earlier ones, to go back to
+function HistoryNav({ chat, session }) {
+  const [open, setOpen] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const boxRef = useRef(null);
+  const { list, remove } = useEarlierConversations(chat, session, refresh);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+  const toggle = () => { if (!open) setRefresh(n => n + 1); setOpen(o => !o); };
+  const pick = (id) => { setOpen(false); chat.openConversation(id); };
+  return (
+    <div className="k-qnav" ref={boxRef}>
+      <button className="k-icon-btn" onClick={toggle} aria-expanded={open} aria-label="Conversations précédentes">
+        <History size={15} /><span>Historique</span>
+      </button>
+      {open && (
+        <div className="k-qnav-menu k-history-menu">
+          {list.length
+            ? <ConversationItems list={list} remove={remove} open={pick} disabled={chat.searching} />
+            : <p className="k-muted">Aucune conversation précédente.</p>}
+          {!session.user && (
+            <p className="k-history-note">
+              Sans compte, vos {LOCAL_HISTORY_MAX} dernières conversations restent sur cet appareil.{' '}
+              <button className="k-textlink" onClick={() => { setOpen(false); session.openAuth('register'); }}>Créer un compte</button>
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -329,7 +382,6 @@ export default function Assistant({ chat, compare, sub, session }) {
     chat.switchCorpus(m);
     go('assistant');
   };
-  const hasSources = corpus === 'presse' && chatHistory.at(-1)?.sources?.length > 0;
 
   const newConversation = () => { chat.clear(); inputRef.current?.focus(); };
   // Once a conversation runs, the controls move from the top of the page to the
@@ -366,7 +418,7 @@ export default function Assistant({ chat, compare, sub, session }) {
               ? "La réponse cite les numéros d'articles exacts. Elle ne remplace pas un conseil juridique."
               : "La réponse est rédigée à partir de cinq articles au plus, cités en dessous pour que vous puissiez vérifier."}
           </p>
-          {session.user && <SavedConversations chat={chat} session={session} />}
+          <SavedConversations chat={chat} session={session} />
           <div className="k-try">
             <span className="k-label">Essayez</span>
             <div className="k-try-grid">
@@ -397,7 +449,7 @@ export default function Assistant({ chat, compare, sub, session }) {
                 })}
               </div>
               <div className="k-dock-actions">
-                {hasSources && <a className="k-icon-btn" href="#/tendances/carte" aria-label="Voir sur la carte"><MapIcon size={15} /><span>Carte</span></a>}
+                <HistoryNav chat={chat} session={session} />
                 <QuestionsNav entries={chatHistory} threadRef={threadRef} />
                 <button className="k-icon-btn" onClick={newConversation} aria-label="Nouvelle conversation"><SquarePen size={15} /><span>Nouvelle</span></button>
               </div>

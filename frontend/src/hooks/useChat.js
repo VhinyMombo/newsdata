@@ -18,6 +18,21 @@ const savedTurns = (history) => history
   .filter(t => t.answer && !t.error)
   .map(t => ({ question: t.question, answer: t.answer, sources: (t.sources || []).slice(0, 10).map(slimSource) }));
 
+// Without an account: this many earlier conversations kept on the device
+export const LOCAL_HISTORY_MAX = 5;
+const LOCAL_HISTORY_KEY = 'lekiosque_history';
+const readLocal = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY) || '[]');
+    return Array.isArray(saved) ? saved.slice(0, LOCAL_HISTORY_MAX) : [];
+  } catch { return []; }
+};
+const storeLocal = (list) => {
+  const kept = list.slice(0, LOCAL_HISTORY_MAX);
+  try { localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(kept)); } catch { /* storage full or unavailable */ }
+  return kept;
+};
+
 export function useChat({ setApiStatus, authToken }) {
   // Kept with the conversation, so a relaunched app goes on in the same corpus
   const [corpus, setCorpus] = useState(() => {
@@ -41,6 +56,25 @@ export function useChat({ setApiStatus, authToken }) {
   // Live view for runSearch: its closure would otherwise read stale streamed content
   const chatRef = useRef(chatHistory);
   useEffect(() => { chatRef.current = chatHistory; }, [chatHistory]);
+
+  // Without an account, the last few conversations stay on this device (with one,
+  // the account keeps them all): the open one goes in when another starts
+  const [localHistory, setLocalHistory] = useState(readLocal);
+  const live = useRef({ authToken, threadId, corpus });
+  useEffect(() => { live.current = { authToken, threadId, corpus }; }, [authToken, threadId, corpus]);
+  // reopened: the conversation leaving the list for the screen, in the same step, so
+  // that the full list does not first drop its oldest one
+  const archive = useCallback((reopened = null) => {
+    if (live.current.authToken) return;
+    const turns = savedTurns(chatRef.current);
+    const { threadId: id, corpus: c } = live.current;
+    const entry = turns.length && { id, corpus: c, title: turns[0].question.slice(0, 160), turns, updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ') };
+    if (!entry && !reopened) return;
+    setLocalHistory(prev => storeLocal([
+      ...(entry ? [entry] : []),
+      ...prev.filter(e => e.id !== id && e.id !== reopened),
+    ]));
+  }, []);
 
   useEffect(() => {
     if (searching) return;
@@ -80,7 +114,7 @@ export function useChat({ setApiStatus, authToken }) {
       for (let i = 0; i < 40 && isBusy(); i++) await new Promise(r => setTimeout(r, 50));
     }
     if (!acquire()) return;
-    if (newThread) { chatRef.current = []; setThreadId(newThreadId()); }
+    if (newThread) { archive(); chatRef.current = []; setThreadId(newThreadId()); }
     const c = corpusOverride || corpus;
     track('question', { rubrique: c === 'codes' ? 'lois' : 'actualite', origine: pinned ? 'article' : existingIdx !== null ? 'relance' : 'saisie' });
     if (existingIdx !== null) pinned = pinned || chatRef.current[existingIdx]?.pinned || null;
@@ -147,24 +181,34 @@ export function useChat({ setApiStatus, authToken }) {
       setSearching(false);
       abortRef.current = null;
     }
-  }, [corpus, setApiStatus]);
+  }, [corpus, setApiStatus, archive]);
 
-  const stop = useCallback(() => abortRef.current?.abort(), []);
+  const stop =useCallback(() => abortRef.current?.abort(), []);
 
   const clear = useCallback(() => {
     abortRef.current?.abort();
+    archive();
     setChatHistory([]);
     setThreadId(newThreadId());
-    localStorage.removeItem(CHAT_STORAGE_KEY);
-  }, []);
+    try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch { /* storage unavailable */ }
+  }, [archive]);
 
-  // Reopen a saved conversation where it was left; a question asked next continues it
+  // Reopen an earlier conversation where it was left; a question asked next continues
+  // it. Signed in: from the account. Otherwise: from this device's short list.
   const openConversation = useCallback(async (id) => {
     // Opening generates nothing: only a chat answer still streaming stands in the way
-    if (!authToken || abortRef.current) return false;
-    const res = await fetch(`${API_URL}/conversations/${id}`, { headers: { Authorization: `Bearer ${authToken}` } }).catch(() => null);
-    if (!res?.ok) return false;
-    const conv = await res.json();
+    if (abortRef.current) return false;
+    let conv = null;
+    if (authToken) {
+      const res = await fetch(`${API_URL}/conversations/${id}`, { headers: { Authorization: `Bearer ${authToken}` } }).catch(() => null);
+      if (!res?.ok) return false;
+      conv = await res.json();
+    } else {
+      conv = localHistory.find(c => c.id === id);
+      if (!conv) return false;
+      // The open conversation takes its place in the list; the reopened one leaves it
+      archive(id);
+    }
     const turns = conv.turns.map((t, i) => ({ id: `${id}-${i}`, question: t.question, answer: t.answer, sources: t.sources, error: null }));
     savedRef.current = JSON.stringify({ corpus: conv.corpus, turns: savedTurns(turns) });
     setCorpus(conv.corpus);
@@ -172,7 +216,9 @@ export function useChat({ setApiStatus, authToken }) {
     chatRef.current = turns;
     setChatHistory(turns);
     return true;
-  }, [authToken]);
+  }, [authToken, localHistory, archive]);
+
+  const removeLocal = useCallback((id) => setLocalHistory(prev => storeLocal(prev.filter(c => c.id !== id))), []);
 
   // Switching corpus starts a fresh thread: mixed press and legal answers read ambiguously
   const switchCorpus = useCallback((next) => {
@@ -185,5 +231,5 @@ export function useChat({ setApiStatus, authToken }) {
     }
   }, [corpus, clear]);
 
-  return { corpus, switchCorpus, searching, chatHistory, runSearch, stop, clear, threadId, openConversation };
+  return { corpus, switchCorpus, searching, chatHistory, runSearch, stop, clear, threadId, openConversation, localHistory, removeLocal };
 }
