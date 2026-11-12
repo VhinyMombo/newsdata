@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, GitCompare, History, ListOrdered, MessageCircle, Newspaper, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, Check, GitCompare, History, ListOrdered, MessageCircle, Newspaper, Plus, RefreshCw, Scale, Square, SquarePen, X } from 'lucide-react';
 import { LOCAL_HISTORY_MAX } from '../hooks/useChat';
+import { useFollows } from '../hooks/useFollows';
+import { followSuggestions } from '../utils/followSuggest';
 import { AnswerText, SourceList, Thinking } from '../utils/text';
 import { go } from '../hooks/useRoute';
 import { API_URL, postJSON } from '../utils/api';
@@ -110,7 +112,31 @@ async function shareOnWhatsApp({ question, answer, pinned, answerId }, corpus) {
   else window.location.href = url;
 }
 
-function Turn({ entry, idx, live, chat }) {
+// « Suivre » under a press answer: the names its articles' titles share, one click to
+// follow. A followed name comes back on the front page (« Depuis votre dernière
+// visite ») and, with notifications on, when the press picks it up again.
+function FollowChips({ entry, follows }) {
+  const [justFollowed, setJustFollowed] = useState(false);
+  const names = followSuggestions(entry.pinned?.title || entry.question, entry.sources);
+  if (!names.length) return null;
+  return (
+    <div className="k-follow-row">
+      <span className="k-follow-label">Suivre</span>
+      {names.map(n => {
+        const on = follows.isFollowed(n.type, n.value);
+        return (
+          <button key={n.value} className={`k-chip k-follow-chip ${on ? 'on' : ''}`} aria-pressed={on}
+            onClick={() => setJustFollowed(follows.toggleFollow(n.type, n.value, n.label))}>
+            {on ? <Check size={13} aria-hidden="true" /> : <Plus size={13} aria-hidden="true" />}{n.label}
+          </button>
+        );
+      })}
+      {justFollowed && <span className="k-follow-note">Vous le retrouverez à l'accueil quand la presse en reparle.</span>}
+    </div>
+  );
+}
+
+function Turn({ entry, idx, live, chat, follows }) {
   const [copied, setCopied] = useState(false);
   const shown = useSteadyText(entry.answer || '', live);
   const writing = live || shown.length < (entry.answer || '').length;
@@ -129,6 +155,7 @@ function Turn({ entry, idx, live, chat }) {
           {entry.fromCache && !writing && <span className="k-tag" title="Question déjà posée récemment : réponse resservie sans regénération">Réponse instantanée</span>}
           <AnswerText text={shown} streaming={writing} sources={entry.sources} />
           {!writing && <SourceList sources={entry.sources} />}
+          {!writing && chat.corpus === 'presse' && <FollowChips entry={entry} follows={follows} />}
           {!writing && (
             <div className="k-turn-actions">
               <button className="k-btn ghost" onClick={copy}>{copied ? 'Copié' : 'Copier la réponse'}</button>
@@ -209,7 +236,7 @@ function useEarlierConversations(chat, session, refresh) {
     if (!authToken) return;
     fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${authToken}` } })
       .then(r => (r.ok ? r.json() : []))
-      .then(setServer)
+      .then(l => setServer(Array.isArray(l) ? l : []))
       .catch(() => setServer([]));
   }, [authToken, refresh]);
   const list = (authToken
@@ -368,6 +395,7 @@ export default function Assistant({ chat, compare, sub, session }) {
   const threadRef = useRef(null);
   const { chatHistory, searching, corpus } = chat;
   const empty = chatHistory.length === 0 && !searching;
+  const follows = useFollows({ user: session.user, authToken: session.authToken });
 
   // A new question goes to the top of the screen once; the answer then grows
   // below it without moving the page. Following every streamed chunk made the
@@ -433,7 +461,7 @@ export default function Assistant({ chat, compare, sub, session }) {
         <>
           <div className="k-thread" role="log" aria-label="Conversation" ref={threadRef}>
             {chatHistory.map((entry, idx) => (
-              <Turn key={entry.id ?? idx} entry={entry} idx={idx} chat={chat} live={idx === chatHistory.length - 1 && searching} />
+              <Turn key={entry.id ?? idx} entry={entry} idx={idx} chat={chat} follows={follows} live={idx === chatHistory.length - 1 && searching} />
             ))}
           </div>
           <div className="k-dock">

@@ -115,7 +115,7 @@ h1, h2, h3, h4 { font-family: var(--serif); font-weight: 400; letter-spacing: -0
 
 .k-chips, .k-legend { display: flex; flex-wrap: wrap; gap: 8px; }
 .k-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0.4rem 0.9rem; border: 1px solid var(--rule-strong); border-radius: 999px; background: var(--white); font-size: 0.85rem; text-align: left; text-decoration: none; color: var(--ink); transition: border-color 0.2s, color 0.2s; }
-.k-chip:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.k-chip:hover:not(:disabled):not(.on) { border-color: var(--green); color: var(--green); }
 .k-chip b { font-weight: 600; color: var(--muted); font-size: 0.78rem; }
 .k-chip.on { background: var(--green); border-color: var(--green); color: var(--on-green); }
 .k-chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
@@ -363,6 +363,11 @@ a.k-src:hover { text-decoration: underline; }
 .k-question { font-size: clamp(1.45rem, 2.6vw, 1.9rem); line-height: 1.22; margin-bottom: 16px; }
 .k-answer { max-width: var(--read); }
 .k-turn-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 14px; margin-left: -10px; }
+/* « Suivre » under an answer: the names its articles share */
+.k-follow-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.k-follow-label { font: 500 0.7rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.k-follow-chip { min-height: 32px; padding: 0.3rem 0.75rem; gap: 5px; }
+.k-follow-note { flex-basis: 100%; font-size: 0.82rem; color: var(--muted); }
 
 .k-dock { position: sticky; bottom: var(--tabbar-h); z-index: 20; padding: 20px 0 12px; background: var(--white); }
 /* iPhone: down to the real bottom of the screen when iOS places the bars too high (utils/keyboard.js) */
