@@ -1,3 +1,7 @@
+// The start of the question below: api.py's EXPLAIN_PREFIX, and useChat's lookup of
+// the day's kept explanation
+export const EXPLAIN_PREFIX = 'Que dit cet article et dans quel contexte';
+
 // A click on an article goes to the assistant first: it explains the article
 // and its context, and cites it first with the link to the newspaper's site
 export function explain(ask, a) {

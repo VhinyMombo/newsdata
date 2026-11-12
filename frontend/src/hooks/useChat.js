@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '../utils/track';
 import { API_URL, errorDetail, postJSON, readStream } from '../utils/api';
 import { acquire, isBusy, release } from '../utils/lock';
+import { EXPLAIN_PREFIX } from '../utils/explain';
 
 const CHAT_STORAGE_KEY = 'lekiosque_chat';
 const THREAD_STORAGE_KEY = 'lekiosque_thread';
@@ -98,6 +99,17 @@ export function useChat({ setApiStatus, authToken }) {
 
     let answer = '';
     try {
+      // « Expliquer »: the article may already have been explained today, by this
+      // reader or another; that text and its sources are then shown, nothing generated
+      if (pinned && existingIdx === null && c === 'presse' && userQ.startsWith(EXPLAIN_PREFIX)) {
+        const kept = await fetch(`${API_URL}/explication?url=${encodeURIComponent(pinned.url)}`, { signal: controller.signal })
+          .then(r => (r.ok ? r.json() : null)).catch(e => { if (e.name === 'AbortError') throw e; return null; });
+        if (kept) {
+          answer = kept.answer;
+          patch({ sources: kept.sources, answer, fromCache: true, answerId: kept.answer_id });
+          return;
+        }
+      }
       const res = await postJSON('/search', { question: userQ, n_results: 5, previous_question: prevQuestion, corpus: c }, controller.signal);
       if (!res.ok) throw new Error(await errorDetail(res));
       const json = await res.json();

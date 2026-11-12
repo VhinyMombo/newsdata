@@ -2050,6 +2050,35 @@ def _take_answer_quota(request: Request, token: str | None) -> None:
             _answer_quota["by"][who] = _answer_quota["by"].get(who, 0) + 1
 
 
+# « Expliquer » answers, one per article, kept a day in memory only (nothing on disk;
+# a restart forgets them): another click on the same article that day, by the same
+# reader or another, gets the same text and sources (GET /explication) without a
+# generation. After a day the next click writes a new one, with the newer articles.
+EXPLANATION_TTL_S = 24 * 3600
+EXPLANATION_MAX = 2000
+_explanations: dict[str, dict] = {}
+
+
+def _explanation_get(url: str) -> dict | None:
+    kept = _explanations.get(url)
+    if kept and kept["expires"] < time.time():
+        _explanations.pop(url, None)
+        return None
+    return kept and {"answer": kept["answer"], "sources": kept["sources"]}
+
+
+def _explanation_put(url: str, answer: str, sources: list[dict]) -> None:
+    """The first complete explanation of the day is the one kept."""
+    if _explanation_get(url):
+        return
+    now = time.time()
+    for key in [k for k, v in _explanations.items() if v["expires"] < now]:
+        del _explanations[key]
+    while len(_explanations) >= EXPLANATION_MAX:
+        del _explanations[next(iter(_explanations))]
+    _explanations[url] = {"answer": answer, "sources": sources, "expires": now + EXPLANATION_TTL_S}
+
+
 @app.post("/answer")
 @limiter.limit("6/minute")
 def answer(request: Request, req: AnswerRequest, token: str | None = Depends(_bearer_token)):
@@ -2084,6 +2113,18 @@ def answer(request: Request, req: AnswerRequest, token: str | None = Depends(_be
         return StreamingResponse(iter([empty_msg]), media_type="text/plain")
 
     _take_answer_quota(request, token)
+
+    # « Expliquer » (a new conversation, the article first): kept for good with its
+    # sources, in the order the answer cites them, for GET /explication
+    explained_sources = None
+    if req.corpus == "presse" and not req.history and req.urls and req.question.startswith(EXPLAIN_PREFIX):
+        by_url = {a.url: a for a in context_items}
+        if req.urls[0] in by_url:
+            explained_sources = [
+                {"url": u, "title": by_url[u].title, "source": by_url[u].source, "date": by_url[u].date}
+                if u in by_url else {"url": u, "title": u, "source": "", "date": ""}
+                for u in req.urls
+            ]
 
     if req.corpus == "codes":
         system_prompt = get_codes_system()
@@ -2120,9 +2161,26 @@ def answer(request: Request, req: AnswerRequest, token: str | None = Depends(_be
             _remember_answer(answer_id, req, text)
             if cache_key:
                 _answer_cache_put(cache_key, text)
+            if explained_sources:
+                _explanation_put(req.urls[0], text, explained_sources)
 
     return StreamingResponse(generate(), media_type="text/plain",
                              headers={"X-Answer-Source": "fresh", "X-Answer-Id": answer_id})
+
+
+@app.get("/explication")
+@limiter.limit("60/minute")
+def get_explanation(request: Request, url: str = Query(min_length=1, max_length=2000)):
+    """The kept « Expliquer » answer for an article, with its sources: no generation."""
+    kept = _explanation_get(url)
+    if not kept:
+        raise HTTPException(status_code=404, detail="Pas encore expliqué.")
+    # An id, so that the reader can share it like any other answer
+    answer_id = secrets.token_urlsafe(9)
+    question = f"{EXPLAIN_PREFIX} s'inscrit-il : « {kept['sources'][0]['title'][:300]} » ?"
+    _remember_answer(answer_id, AnswerRequest(question=question, urls=[s["url"] for s in kept["sources"]]),
+                     kept["answer"])
+    return {**kept, "answer_id": answer_id}
 
 
 # ── Shared answers ────────────────────────────────────────────────────────────
