@@ -2290,17 +2290,20 @@ def read_share(share_id: str = PathParam(max_length=20)):
 
 
 # The picture above the shared link in WhatsApp: the answer's title, large, and the
-# newspapers it cites (share_card.py). A share never changes, so neither does its picture.
+# newspapers it cites (share_card.py). Kept a day by browsers, so a change of design reaches it.
 @app.get("/r/{share_id}/image.jpg")
 def share_image(share_id: str = PathParam(max_length=20)):
     share = auth.get_share(share_id) if re.fullmatch(r"[A-Za-z0-9_-]{4,20}", share_id) else None
     if not share:
         return RedirectResponse(f"{PUBLIC_URL}/og-kiosque-v2.png", status_code=302)
-    papers = [src.get("source", "") for src in share["sources"] if isinstance(src, dict)]
+    # The newspapers' names as the site shows them, not their ids (gabonreview → Gabonreview)
+    import push_notify  # imports this module: loaded on use, as for the announcements
+    papers = [push_notify.SOURCE_LABELS.get(src.get("source", ""), src.get("source", ""))
+              for src in share["sources"] if isinstance(src, dict)]
     kicker = "LES CODES DE LOI" if share["corpus"] == "codes" else "LA PRESSE EN PARLE"
     image = share_card.render(share["headline"] or share["question"], papers, kicker)
     return Response(image, media_type="image/jpeg",
-                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/r/{share_id}", response_class=HTMLResponse)
